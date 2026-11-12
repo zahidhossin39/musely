@@ -21,3 +21,4 @@ gradlew.bat text eol=crlf
 *.aab binary
 *.keystore binary
 *.jks binary
+*.p12 binary
