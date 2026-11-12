@@ -184,7 +184,7 @@ fun DetailScreen(
                     )
                 }
                 if (isCustomPlaylist) {
-                    val playlistId = detail.playlistId!!
+                    val playlistId = detail.playlistId
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -209,7 +209,7 @@ fun DetailScreen(
     }
 
     if (showAddSongs && isCustomPlaylist) {
-        val playlistId = detail.playlistId!!
+        val playlistId = detail.playlistId
         val availableSongs = remember(allVisibleSongs, detail.songs) {
             val existingIds = detail.songs.mapTo(HashSet()) { it.id }
             allVisibleSongs.filter { it.id !in existingIds }
@@ -228,7 +228,7 @@ fun DetailScreen(
     }
 
     if (showRenameDialog && isCustomPlaylist) {
-        val playlistId = detail.playlistId!!
+        val playlistId = detail.playlistId
         PlaylistNameDialog(
             title = "Rename playlist",
             initialName = detail.title,
@@ -245,7 +245,7 @@ fun DetailScreen(
     }
 
     if (showDeleteDialog && isCustomPlaylist) {
-        val playlistId = detail.playlistId!!
+        val playlistId = detail.playlistId
         ConfirmDeletePlaylistDialog(
             playlistName = detail.title,
             onDismiss = { showDeleteDialog = false },
