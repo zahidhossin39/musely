@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -70,6 +71,8 @@ fun NowPlayingScreen(vm: MainViewModel, state: PlaybackState, onClose: () -> Uni
     Box(
         Modifier
             .fillMaxSize()
+            // Swallow touches so taps on empty areas never reach the library underneath.
+            .pointerInput(Unit) {}
             .background(colors.surface)
             .background(Brush.verticalGradient(0f to colors.primaryContainer.copy(alpha = 0.65f), 0.75f to Color.Transparent)),
     ) {

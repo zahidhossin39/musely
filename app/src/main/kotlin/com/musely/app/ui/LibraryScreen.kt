@@ -33,10 +33,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -56,10 +53,12 @@ import java.time.LocalTime
 internal enum class Section(val label: String) { Songs("Songs"), Albums("Albums"), Artists("Artists") }
 
 @Composable
-fun LibraryScreen(
+internal fun LibraryScreen(
     vm: MainViewModel,
     playback: PlaybackState,
     gridState: LazyGridState,
+    section: Section,
+    onSectionChange: (Section) -> Unit,
     bottomInset: Dp,
     onOpenDetail: (LibraryDetail) -> Unit,
 ) {
@@ -69,7 +68,6 @@ fun LibraryScreen(
     val albums by vm.albums.collectAsStateWithLifecycle()
     val artists by vm.artists.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
-    var section by rememberSaveable { mutableStateOf(Section.Songs) }
     val hour = remember { LocalTime.now().hour }
 
     LazyVerticalGrid(
@@ -92,7 +90,7 @@ fun LibraryScreen(
             query.isNotBlank() -> searchResults(query.trim(), results, playback, vm)
             else -> {
                 fullWidth("sections") {
-                    SectionChips(section, onSelect = { section = it }, onShuffle = { vm.shuffle(songs) })
+                    SectionChips(section, onSelect = onSectionChange, onShuffle = { vm.shuffle(songs) })
                 }
                 when (section) {
                     Section.Songs -> songRows(songs, playback, vm)

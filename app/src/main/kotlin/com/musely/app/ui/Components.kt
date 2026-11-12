@@ -27,7 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.MutableLongState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
@@ -53,7 +53,7 @@ private const val POSITION_POLL_MS = 500L
 
 /** Live playback position, polled while playing. */
 @Composable
-internal fun rememberPositionMs(vm: MainViewModel, songId: Long, isPlaying: Boolean): MutableState<Long> {
+internal fun rememberPositionMs(vm: MainViewModel, songId: Long, isPlaying: Boolean): MutableLongState {
     val position = remember { mutableLongStateOf(0L) }
     LaunchedEffect(songId, isPlaying) {
         while (true) {

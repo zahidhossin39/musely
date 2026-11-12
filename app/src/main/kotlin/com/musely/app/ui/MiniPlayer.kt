@@ -35,7 +35,7 @@ import com.musely.app.R
 import com.musely.app.ui.theme.LocalSpotlight
 
 /** Height the library reserves at the bottom so the floating mini player never hides a row. */
-val MiniPlayerReserve = 100.dp
+val MiniPlayerReserve = 112.dp
 
 /** Floating "now playing" card; tap to open the full player. */
 @Composable

@@ -83,6 +83,8 @@ private fun Player(vm: MainViewModel) {
     var showPlayer by rememberSaveable { mutableStateOf(false) }
     var detail by remember { mutableStateOf<LibraryDetail?>(null) }
     val gridState = rememberLazyGridState()
+    // Lives here, not in LibraryScreen, so the tab survives a trip into an album or artist.
+    var section by rememberSaveable { mutableStateOf(Section.Songs) }
     val hasSong = playback.song != null
     val bottomInset = if (hasSong) MiniPlayerReserve else 0.dp
 
@@ -97,7 +99,13 @@ private fun Player(vm: MainViewModel) {
                 label = "libraryContent",
             ) { open ->
                 if (open == null) {
-                    LibraryScreen(vm, playback, gridState, bottomInset, onOpenDetail = { detail = it })
+                    LibraryScreen(
+                        vm, playback, gridState,
+                        section = section,
+                        onSectionChange = { section = it },
+                        bottomInset = bottomInset,
+                        onOpenDetail = { detail = it },
+                    )
                 } else {
                     DetailScreen(open, vm, playback, bottomInset, onBack = { detail = null })
                 }
