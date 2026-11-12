@@ -4,15 +4,15 @@ plugins {
 }
 
 android {
-    namespace = "com.waveloop.player"
+    namespace = "com.musely.app"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.waveloop.player"
+        applicationId = "com.musely.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     androidResources {

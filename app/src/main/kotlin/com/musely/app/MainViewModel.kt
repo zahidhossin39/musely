@@ -1,4 +1,4 @@
-package com.waveloop.player
+package com.musely.app
 
 import android.app.Application
 import android.content.ComponentName
@@ -9,6 +9,7 @@ import android.provider.MediaStore
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.random.Random
 
 data class PlaybackState(
     val song: Song? = null,
@@ -34,6 +36,8 @@ data class PlaybackState(
     val shuffle: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val durationMs: Long = 0,
+    /** The song that plays after the current one, if the queue has one. */
+    val nextSong: Song? = null,
 )
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
@@ -105,14 +109,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun syncPlayback() {
         val c = controller ?: return
+        val nextIndex = c.nextMediaItemIndex
         _playback.value = PlaybackState(
-            song = c.currentMediaItem?.mediaId?.toLongOrNull()?.let { songsById[it] },
+            song = c.currentMediaItem?.let(::songFor),
             isPlaying = c.isPlaying,
             shuffle = c.shuffleModeEnabled,
             repeatMode = c.repeatMode,
             durationMs = c.duration.coerceAtLeast(0),
+            nextSong = if (nextIndex == C.INDEX_UNSET) null else songFor(c.getMediaItemAt(nextIndex)),
         )
     }
+
+    private fun songFor(item: MediaItem): Song? = item.mediaId.toLongOrNull()?.let { songsById[it] }
 
     /** Replaces the queue with [queue] and starts playing at [index]. */
     fun play(queue: List<Song>, index: Int) {
@@ -120,6 +128,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         c.setMediaItems(queue.map { it.toMediaItem() }, index, 0L)
         c.prepare()
         c.play()
+    }
+
+    /** Plays [queue] in order from the top, turning shuffle off. */
+    fun playAll(queue: List<Song>) {
+        if (queue.isEmpty()) return
+        controller?.shuffleModeEnabled = false
+        play(queue, 0)
+    }
+
+    /** Plays [queue] shuffled, starting from a random song. */
+    fun shuffle(queue: List<Song>) {
+        if (queue.isEmpty()) return
+        controller?.shuffleModeEnabled = true
+        play(queue, Random.nextInt(queue.size))
     }
 
     fun togglePlay() {

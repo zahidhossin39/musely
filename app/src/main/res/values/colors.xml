@@ -1,0 +1,4 @@
+<resources>
+    <!-- Window + splash background; mirrors the Compose surface colour. -->
+    <color name="musely_surface">#FCF8FF</color>
+</resources>
