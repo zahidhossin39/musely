@@ -128,6 +128,9 @@ Musely does **not** request the `INTERNET` permission—all scanning, artwork de
 # Run unit tests
 ./gradlew testDebugUnitTest
 
+# Run Android Lint
+./gradlew lintDebug
+
 # Build debug APK
 ./gradlew assembleDebug
 

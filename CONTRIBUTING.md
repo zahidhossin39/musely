@@ -21,9 +21,9 @@ Thanks for your interest in contributing to **Musely**! Musely is designed to be
    ```properties
    sdk.dir=/path/to/Android/Sdk
    ```
-3. Verify the project builds and passes unit tests:
+3. Verify the project builds, passes lint, and passes unit tests:
    ```bash
-   ./gradlew testDebugUnitTest assembleDebug
+   ./gradlew testDebugUnitTest lintDebug assembleDebug
    ```
    On Windows, use `gradlew.bat`.
 
