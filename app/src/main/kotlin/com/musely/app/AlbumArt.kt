@@ -1,4 +1,4 @@
-package com.waveloop.player
+package com.musely.app
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -8,9 +8,9 @@ import android.util.LruCache
 import android.util.Size
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -20,6 +20,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -66,7 +67,7 @@ private object ArtCache {
 }
 
 @Composable
-fun AlbumArt(albumId: Long, modifier: Modifier = Modifier, large: Boolean = false, corner: Dp = 6.dp) {
+fun AlbumArt(albumId: Long, modifier: Modifier = Modifier, large: Boolean = false, corner: Dp = 12.dp) {
     val context = LocalContext.current.applicationContext
     val key = ArtCache.key(albumId, large)
     val image by produceState<ImageBitmap?>(ArtCache.get(key)?.asImageBitmap(), key) {
@@ -75,10 +76,16 @@ fun AlbumArt(albumId: Long, modifier: Modifier = Modifier, large: Boolean = fals
             value = withContext(Dispatchers.IO) { ArtCache.load(context, albumId, large) }?.asImageBitmap()
         }
     }
-    Box(
+    val colors = MaterialTheme.colorScheme
+    // Songs without artwork get a soft brand-tinted tile instead of a flat grey box.
+    val placeholder = Brush.linearGradient(
+        listOf(colors.primary.copy(alpha = 0.30f), colors.primary.copy(alpha = 0.08f)),
+    )
+    BoxWithConstraints(
         modifier
             .clip(RoundedCornerShape(corner))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .background(colors.surfaceContainerHigh)
+            .background(placeholder),
         contentAlignment = Alignment.Center,
     ) {
         val art = image
@@ -87,8 +94,8 @@ fun AlbumArt(albumId: Long, modifier: Modifier = Modifier, large: Boolean = fals
         } else {
             Icon(
                 painterResource(R.drawable.ic_note), null,
-                Modifier.fillMaxSize().padding(if (large) 96.dp else 12.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                Modifier.size(maxWidth * 0.4f),
+                tint = colors.primary.copy(alpha = 0.85f),
             )
         }
     }

@@ -1,4 +1,4 @@
-package com.waveloop.player
+package com.musely.app
 
 import android.content.ContentUris
 import android.content.Context

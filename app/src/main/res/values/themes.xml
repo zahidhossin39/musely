@@ -1,5 +1,5 @@
 <resources>
-    <style name="Theme.Waveloop" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">#101014</item>
+    <style name="Theme.Musely" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/musely_surface</item>
     </style>
 </resources>

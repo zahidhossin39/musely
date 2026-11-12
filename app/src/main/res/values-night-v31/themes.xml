@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.Musely" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/musely_surface</item>
+        <item name="android:windowSplashScreenBackground">@color/musely_surface</item>
+    </style>
+</resources>

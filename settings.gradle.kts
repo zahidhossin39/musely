@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "waveloop"
+rootProject.name = "musely"
 include(":app")
