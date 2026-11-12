@@ -74,17 +74,20 @@ fun albumDetail(album: Album, songs: List<Song>): LibraryDetail {
     )
 }
 
-fun artistDetail(artist: Artist, songs: List<Song>): LibraryDetail {
-    val artistSongs = songs.filter { it.artist == artist.name }
+fun artistDetail(name: String, songs: List<Song>): LibraryDetail {
+    val artistSongs = songs.filter { it.artist == name }
     val albums = artistSongs.map { it.albumId }.distinct().size
     return LibraryDetail(
         kind = DetailKind.Artist,
-        title = artist.name,
+        title = name,
         subtitle = "${songCount(artistSongs.size)} · ${albumCount(albums)} · ${formatTotal(artistSongs)}",
         albumId = null,
         songs = artistSongs,
     )
 }
+
+fun artistDetail(artist: Artist, songs: List<Song>): LibraryDetail =
+    artistDetail(artist.name, songs)
 
 fun playlistDetail(playlist: Playlist, visibleSongsById: Map<Long, Song>): LibraryDetail {
     val resolved = playlist.songIds.mapNotNull { visibleSongsById[it] }
