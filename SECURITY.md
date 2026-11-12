@@ -29,8 +29,8 @@ Please **do not** disclose security vulnerabilities in public GitHub issues or p
 
 Instead, please report suspected vulnerabilities privately:
 
-1. Use **GitHub Private Vulnerability Reporting** via the **Security → Advisories** tab if enabled on the repository.
-2. Otherwise, reach out directly to the repository maintainer ([@zahidhossin39](https://github.com/zahidhossin39)) before sharing details publicly.
+1. Use **GitHub Private Vulnerability Reporting** via the **Security → Advisories** tab when enabled on the repository.
+2. Otherwise, email the repository maintainer directly at [zahidhossin39@gmail.com](mailto:zahidhossin39@gmail.com) (see [@zahidhossin39](https://github.com/zahidhossin39)) before sharing details publicly.
 
 When reporting an issue, please include:
 

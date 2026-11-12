@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Repository hygiene configuration (`.editorconfig`, `.gitattributes`, expanded `.gitignore`)
+- Community health and governance documentation (`README.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `CHANGELOG.md`)
+- GitHub Issue Forms, Pull Request template, `CODEOWNERS`, and grouped weekly `dependabot.yml` updates for Gradle and GitHub Actions
+
+### Changed
+- Hardened `.github/workflows/build.yml` with scoped triggers, least-privilege permissions, PR concurrency cancellation, `lintDebug`, test/lint report artifacts, `.apk.sha256` checksums, Node 24 actions, and guarded release-notes/pre-release publishing
+
 ## [1.0.0] - 2026-11-12
 
 ### Added
@@ -32,6 +40,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Floating mini player with live progress indicator and full-screen Now Playing view with breathing artwork, morphing play button, shuffle/repeat controls, and Up Next queue peek
 - Automated GitHub Actions workflow to build release APKs and publish `v*` tag releases
 
+## [0.1.0] - 2026-11-12
+
+### Added
+- Initial Android project skeleton (originally named Waveloop, `com.waveloop.player`) with Jetpack Compose UI, MediaStore library loading, in-memory search, and background Media3 `PlaybackService`
+- MIT `LICENSE` and initial GitHub Actions build workflow
+
 [Unreleased]: https://github.com/zahidhossin39/musely/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/zahidhossin39/musely/compare/v0.2.0...v1.0.0
-[0.2.0]: https://github.com/zahidhossin39/musely/releases/tag/v0.2.0
+[0.2.0]: https://github.com/zahidhossin39/musely/compare/0361685...v0.2.0
+[0.1.0]: https://github.com/zahidhossin39/musely/compare/659d5f5...0361685

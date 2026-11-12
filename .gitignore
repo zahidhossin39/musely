@@ -11,6 +11,7 @@ captures/
 *.dex
 *.class
 *.log
+*.hprof
 
 # Kotlin
 .kotlin/
@@ -22,6 +23,7 @@ keystore.properties
 *.keystore
 *.p12
 *.key
+*.pem
 
 # IDE & editors
 *.iml

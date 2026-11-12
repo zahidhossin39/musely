@@ -63,7 +63,8 @@ Musely does **not** request the `INTERNET` permission—all scanning, artwork de
 | :--- | :--- | :--- |
 | `READ_MEDIA_AUDIO` | Android 13+ (API 33+) | Read local audio files from `MediaStore` |
 | `READ_EXTERNAL_STORAGE` | Android 8.0–12 (API 26–32) | Read local audio files on pre-Android 13 devices |
-| `FOREGROUND_SERVICE` & `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | Android 9+ | Keep music playing in the background with media notification controls |
+| `FOREGROUND_SERVICE` | Android 9+ (API 28+) | Run a foreground service for continuous background playback |
+| `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | Android 14+ (API 34+) | Declare media-playback foreground service type for system controls |
 | `WAKE_LOCK` | Android 8.0+ | Prevent CPU sleep from interrupting audio playback |
 
 ## Tech Stack
@@ -104,11 +105,18 @@ Musely does **not** request the `INTERNET` permission—all scanning, artwork de
 │       │   │   └── ui/                # Compose screens, mini player, components & M3 theme
 │       │   └── res/                   # Vector icons, adaptive/monochrome mipmaps, themes
 │       └── test/kotlin/com/musely/app/ # JUnit 4 unit tests
+├── .editorconfig
+├── .gitattributes
+├── .gitignore
 ├── CHANGELOG.md
 ├── CODE_OF_CONDUCT.md
 ├── CONTRIBUTING.md
 ├── LICENSE
-└── SECURITY.md
+├── SECURITY.md
+├── build.gradle.kts           # Root Gradle plugin versions
+├── gradle.properties          # JVM & AndroidX Gradle properties
+├── gradlew / gradlew.bat      # Gradle wrapper scripts
+└── settings.gradle.kts        # Module & repository configuration
 ```
 
 ## Build & Test
@@ -142,7 +150,7 @@ On Windows, replace `./gradlew` with `gradlew.bat`.
 
 ### Releases
 
-Pushing a version tag matching `v*` (for example `v1.0.0`) runs unit tests, builds `musely-<version>.apk`, generates a `.sha256` checksum, and publishes a GitHub Release automatically via [`.github/workflows/build.yml`](.github/workflows/build.yml).
+Pushing a version tag matching `v*` (for example `v1.0.0`) runs unit tests and Android Lint, builds `musely-<version>.apk`, generates and verifies a `.sha256` checksum, and publishes a GitHub Release automatically via [`.github/workflows/build.yml`](.github/workflows/build.yml).
 
 ## Contributing & Governance
 
