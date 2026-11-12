@@ -31,7 +31,7 @@ Thanks for your interest in contributing to **Musely**! Musely is designed to be
 
 ### Design & Architecture Principles
 
-- **Offline-first & privacy-preserving**: Do **not** add `INTERNET` permissions, analytics, crash trackers, or network dependencies.
+- **Offline-first & privacy-preserving**: Keep audio scanning, playback, and playlists 100% offline with zero analytics, crash trackers, ads, or unnecessary network dependencies (`INTERNET` is scoped solely to the GitHub Releases update check).
 - **Material 3 fidelity**: Respect Musely's brand palette (`MuselyViolet` `#6755EF` and `MuselyLime` `#F4FF90`) and `LocalSpotlight` contrast rules across light and dark modes.
 - **Keep dependencies minimal**: Prefer standard AndroidX, Jetpack Compose, and Media3 APIs over adding external libraries.
 - **Code style**: Follow Kotlin conventions and `.editorconfig` formatting rules (4-space indentation for Kotlin/Gradle/XML, 2-space indentation for YAML/Markdown).
@@ -55,7 +55,7 @@ Thanks for your interest in contributing to **Musely**! Musely is designed to be
 
 ## Release Process (Maintainers)
 
-1. Update `versionCode` and `versionName` in `app/build.gradle.kts`.
+1. Update `versionCode` and `versionName` in `app/build.gradle.kts` (CI also passes `-PversionCode` and `-PversionName` on `v*` tag builds).
 2. Update `CHANGELOG.md` (with a `## [X.Y.Z]` section) and `.github/release-notes.md` with the release highlights and install instructions.
 3. Merge changes into `main`.
 4. Create and push an annotated version tag matching `v*`:
@@ -63,7 +63,7 @@ Thanks for your interest in contributing to **Musely**! Musely is designed to be
    git tag -a vX.Y.Z -m "Musely vX.Y.Z"
    git push origin vX.Y.Z
    ```
-   Pushing a `v*` tag triggers [`.github/workflows/build.yml`](.github/workflows/build.yml) to run unit tests and Android Lint, build `musely-X.Y.Z.apk` with a verified `.sha256` checksum, and publish the GitHub Release (tags containing `-`, such as `vX.Y.Z-rc.1`, are marked as pre-releases). If `.github/release-notes.md` still targets an earlier version, CI automatically falls back to the matching `## [X.Y.Z]` section in `CHANGELOG.md` or GitHub's generated release notes.
+   Pushing a `v*` tag triggers [`.github/workflows/build.yml`](.github/workflows/build.yml) to run unit tests and Android Lint, build `Musely.apk` and `musely-X.Y.Z.apk` with verified `.sha256` checksums, and publish the GitHub Release (tags containing `-`, such as `vX.Y.Z-rc.1`, are marked as pre-releases). If `.github/release-notes.md` still targets an earlier version, CI automatically falls back to the matching `## [X.Y.Z]` section in `CHANGELOG.md` or GitHub's generated release notes.
 
 > [!NOTE]
-> Release builds in `app/build.gradle.kts` currently sign with the debug keystore so CI builds can be installed directly. Replace with a private release keystore before publishing to app stores.
+> CI signs release APKs with a persistent release keystore when `RELEASE_KEYSTORE_BASE64`, `RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS`, and `RELEASE_KEY_PASSWORD` secrets are configured (passed to Gradle via `MUSELY_KEYSTORE_PATH`, `MUSELY_KEYSTORE_PASSWORD`, `MUSELY_KEY_ALIAS`, and `MUSELY_KEY_PASSWORD`), falling back to debug signing on PRs or forks.
