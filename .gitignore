@@ -1,8 +1,37 @@
+# Gradle & build outputs
 .gradle/
 build/
-local.properties
-*.iml
-.idea/
+**/build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+*.log
+
+# Kotlin
 .kotlin/
+
+# Android local configuration & signing secrets
+local.properties
+keystore.properties
 *.jks
 *.keystore
+*.p12
+*.key
+
+# IDE & editors
+*.iml
+.idea/
+.navigation/
+.vscode/
+*.swp
+*~
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
