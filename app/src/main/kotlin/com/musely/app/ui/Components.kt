@@ -76,7 +76,7 @@ internal fun SongRow(song: Song, isCurrent: Boolean, isPlaying: Boolean, onClick
             .padding(horizontal = ItemInset, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AlbumArt(song.albumId, Modifier.size(52.dp), corner = 14.dp)
+        AlbumArt(song.albumId, Modifier.size(52.dp), songId = song.id, corner = 14.dp)
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(
@@ -115,7 +115,12 @@ internal fun AlbumCard(album: Album, onClick: () -> Unit) {
             .clip(MaterialTheme.shapes.large)
             .clickable(onClick = onClick),
     ) {
-        AlbumArt(album.id, Modifier.fillMaxWidth().aspectRatio(1f), corner = 20.dp)
+        AlbumArt(
+            album.id,
+            Modifier.fillMaxWidth().aspectRatio(1f),
+            fallbackSongIds = album.songIds,
+            corner = 20.dp,
+        )
         Spacer(Modifier.height(10.dp))
         Text(album.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(

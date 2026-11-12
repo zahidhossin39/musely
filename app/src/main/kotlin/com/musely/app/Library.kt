@@ -14,15 +14,27 @@ data class Song(
     val durationMs: Long,
     val track: Int,
 ) {
-    val uri: Uri get() = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
+    val uri: Uri get() = songUri(id)
 
     /** Lower-cased text that search matches against. */
     val searchKey: String = "$title\n$artist\n$album".lowercase()
 }
 
-data class Album(val id: Long, val title: String, val artist: String, val songCount: Int)
+data class Album(
+    val id: Long,
+    val title: String,
+    val artist: String,
+    val songCount: Int,
+    val songIds: List<Long> = emptyList(),
+)
 
 data class Artist(val name: String, val songCount: Int)
+
+fun songUri(songId: Long): Uri =
+    ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, songId)
+
+fun albumUri(albumId: Long): Uri =
+    ContentUris.withAppendedId(MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI, albumId)
 
 fun albumArtUri(albumId: Long): Uri =
     ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), albumId)
@@ -66,7 +78,7 @@ fun loadSongs(context: Context): List<Song> {
 
 fun List<Song>.toAlbums(): List<Album> =
     groupBy { it.albumId }
-        .map { (id, s) -> Album(id, s[0].album, s[0].artist, s.size) }
+        .map { (id, s) -> Album(id, s[0].album, s[0].artist, s.size, s.map { it.id }) }
         .sortedBy { it.title.lowercase() }
 
 fun List<Song>.toArtists(): List<Artist> =

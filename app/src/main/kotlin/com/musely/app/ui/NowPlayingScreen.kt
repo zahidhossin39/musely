@@ -88,6 +88,7 @@ fun NowPlayingScreen(vm: MainViewModel, state: PlaybackState, onClose: () -> Uni
                         .aspectRatio(1f)
                         .graphicsLayer { scaleX = artScale; scaleY = artScale }
                         .shadow(32.dp, artShape, ambientColor = colors.primary, spotColor = colors.primary),
+                    songId = song.id,
                     large = true,
                     corner = 28.dp,
                 )
@@ -242,7 +243,7 @@ private fun UpNext(next: Song?) {
                 )
                 return@Row
             }
-            AlbumArt(next.albumId, Modifier.size(40.dp), corner = 10.dp)
+            AlbumArt(next.albumId, Modifier.size(40.dp), songId = next.id, corner = 10.dp)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(

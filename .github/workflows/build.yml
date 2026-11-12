@@ -16,7 +16,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew --no-daemon assembleRelease
+      - run: ./gradlew --no-daemon testDebugUnitTest assembleRelease
       - name: Name the APK
         run: |
           version="${GITHUB_REF_NAME#v}"

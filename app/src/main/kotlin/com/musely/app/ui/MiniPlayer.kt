@@ -59,7 +59,7 @@ fun MiniPlayer(vm: MainViewModel, state: PlaybackState, onOpen: () -> Unit, modi
                 Modifier.padding(start = 10.dp, end = 6.dp, top = 10.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                AlbumArt(song.albumId, Modifier.size(48.dp), corner = 14.dp)
+                AlbumArt(song.albumId, Modifier.size(48.dp), songId = song.id, corner = 14.dp)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(song.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)

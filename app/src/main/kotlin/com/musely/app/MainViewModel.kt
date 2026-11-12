@@ -97,6 +97,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             delay(debounceMs)
+            ArtCache.clearMissing()
             val list = withContext(Dispatchers.IO) {
                 runCatching { loadSongs(getApplication()) }.getOrDefault(emptyList())
             }
@@ -184,7 +185,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 .setTitle(title)
                 .setArtist(artist)
                 .setAlbumTitle(album)
-                .setArtworkUri(albumArtUri(albumId))
+                .setArtworkUri(uri)
                 .build(),
         )
         .build()

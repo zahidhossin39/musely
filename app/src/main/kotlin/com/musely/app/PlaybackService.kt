@@ -2,12 +2,16 @@ package com.musely.app
 
 import android.app.PendingIntent
 import android.content.ContentUris
+import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.net.Uri
 import android.provider.MediaStore
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.util.BitmapLoader
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.RenderersFactory
@@ -17,12 +21,19 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.ListeningExecutorService
+import com.google.common.util.concurrent.MoreExecutors
+import java.io.FileNotFoundException
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
 
 /** Owns the player so music keeps going when the app's screen is closed. */
 @OptIn(UnstableApi::class)
 class PlaybackService : MediaSessionService() {
 
     private var session: MediaSession? = null
+    private val artworkExecutor: ListeningExecutorService =
+        MoreExecutors.listeningDecorator(Executors.newSingleThreadExecutor())
 
     override fun onCreate() {
         super.onCreate()
@@ -50,6 +61,7 @@ class PlaybackService : MediaSessionService() {
         session = MediaSession.Builder(this, player)
             .setSessionActivity(openApp)
             .setCallback(SessionCallback())
+            .setBitmapLoader(CoverBitmapLoader(applicationContext, artworkExecutor))
             .build()
     }
 
@@ -66,7 +78,33 @@ class PlaybackService : MediaSessionService() {
             release()
         }
         session = null
+        artworkExecutor.shutdownNow()
         super.onDestroy()
+    }
+
+    private class CoverBitmapLoader(
+        private val context: Context,
+        private val executor: ListeningExecutorService,
+    ) : BitmapLoader {
+
+        override fun supportsMimeType(mimeType: String): Boolean =
+            mimeType.startsWith("image/", ignoreCase = true)
+
+        override fun decodeBitmap(data: ByteArray): ListenableFuture<Bitmap> =
+            executor.submit(Callable {
+                decodeSampledBitmap(data, NOTIFICATION_ART_PX)
+                    ?: throw IllegalArgumentException("Could not decode cover image bytes")
+            })
+
+        override fun loadBitmap(uri: Uri): ListenableFuture<Bitmap> =
+            executor.submit(Callable {
+                ArtCache.loadFromUri(context, uri, NOTIFICATION_ART_PX)
+                    ?: throw FileNotFoundException("No cover art available for $uri")
+            })
+
+        companion object {
+            private const val NOTIFICATION_ART_PX = 512
+        }
     }
 
     private class SessionCallback : MediaSession.Callback {
