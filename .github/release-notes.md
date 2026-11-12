@@ -1,8 +1,8 @@
-## Musely 1.0.0
+## Musely 2.0.0
 
 **What's new**
-- Updated the Musely app icon from the latest logo so it fills the home-screen launcher container cleanly across standard, round, adaptive, and monochrome/themed launchers
-- Updated the welcome screen emblem to fill its container cleanly without letterboxing
-- Fixed audio cover artwork loading across Songs, Albums, Album Detail, Mini Player, Now Playing, Up Next, and system playback notifications/lock screen using track thumbnails, embedded audio cover art, MediaStore album art, and legacy fallbacks
+- **Playlists & Liked Music**: Create custom playlists with YouTube-Music-inspired 2×2 cover artwork collages, multi-select and add songs, reorder tracks, and star favorites into the pinned **Liked Music** playlist
+- **GitHub Releases Auto-Updater**: Checks for new releases automatically and via the top-right update icon (with an unobtrusive badge when an update is ready), opening the APK download in your browser
+- **Song Management**: View detailed **File Info** (size, format, bitrate, sample rate, path), **Hide/Unhide** tracks from your library, or **Delete** songs from your device with confirmation
 
-**Install:** download `musely-1.0.0.apk` below, open it on your phone, and allow installs from your browser if asked.
+**Install:** download `Musely.apk` (or `musely-2.0.0.apk`) below, verify the `.sha256` checksum if desired, open the APK on your phone, and allow installs from your browser if asked.

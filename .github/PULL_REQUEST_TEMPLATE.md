@@ -20,6 +20,6 @@
 - [ ] Screenshots or screen recordings attached (for UI changes)
 
 ## Checklist
-- [ ] Keeps Musely 100% offline (no `INTERNET` permission, tracking, or network SDKs)
+- [ ] Keeps library & playback 100% offline (no tracking, analytics, ads, or unnecessary network usage)
 - [ ] Added or updated unit tests for logic changes
 - [ ] Updated `README.md` or `CHANGELOG.md` if user-facing behavior changed

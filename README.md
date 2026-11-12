@@ -38,7 +38,10 @@ Musely turns the audio files already stored on your device into a fast, distract
 ## Features
 
 - **Organized local library**: Scans device audio via Android `MediaStore` and observes changes automatically (`ContentObserver`), so newly added tracks appear without manual refreshes.
-- **Browse by Songs, Albums, or Artists**: Switch views with Material 3 filter chips, jump into album tracklists sorted by track number or artist discographies, and play or shuffle any collection in one tap.
+- **Browse by Songs, Albums, Artists, or Playlists**: Switch views with Material 3 filter chips, jump into album tracklists sorted by track number or artist discographies, and play or shuffle any collection in one tap.
+- **Playlists & Liked Music**: Create custom playlists with YouTube-Music-inspired 2×2 cover artwork collages, multi-select and add songs, reorder tracks, and star favorites into the pinned **Liked Music** playlist.
+- **Song management**: Inspect per-song **File Info** (filename, path, size, MIME type, duration, bitrate, sample rate, and modified date), **Hide/Unhide** tracks from the library, or **Delete** audio files from device storage with system confirmation.
+- **GitHub Releases auto-updater**: Checks `zahidhossin39/musely` GitHub Releases on launch, throttled resume, and manually from the top-right update icon (with an unobtrusive badge when an update is available), then hands the APK URL to your browser via `Intent.ACTION_VIEW`.
 - **Instant multi-word search**: Filter across song titles, artists, and album names simultaneously in real time.
 - **Expressive Now Playing view**: Breathing cover artwork (`0.88x` spring settle when paused), a play/pause button with Material 3 corner-shape morphing, interactive scrubbing, shuffle and repeat (`Off` / `All` / `One`) toggles, and an **Up Next** queue preview.
 - **Floating Mini Player**: Persistent bottom card with live progress bar across library and detail screens.
@@ -48,24 +51,26 @@ Musely turns the audio files already stored on your device into a fast, distract
 
 ## Download
 
-1. Download the latest APK from [GitHub Releases](https://github.com/zahidhossin39/musely/releases/latest).
+1. Download `Musely.apk` (or `musely-<version>.apk`) from [GitHub Releases](https://github.com/zahidhossin39/musely/releases/latest).
 2. Open the downloaded `.apk` file on your Android device (Android 8.0 / API 26 or newer).
 3. Allow installation from unknown sources / your browser if prompted.
 
 > [!NOTE]
-> Test/release APKs published via CI are currently signed with the debug signing config (`app/build.gradle.kts`) so builds can be installed directly. See [SECURITY.md](SECURITY.md) for verification details.
+> Release APKs published via CI are signed with a persistent release keystore when signing secrets are configured (`RELEASE_KEYSTORE_BASE64`, `RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`), falling back to the debug signing config on PRs or forks. See [SECURITY.md](SECURITY.md) for verification details.
 
 ## Privacy & Permissions
 
-Musely does **not** request the `INTERNET` permission—all scanning, artwork decoding, and playback happen strictly on-device.
+Musely's audio library, playlists, artwork decoding, and playback remain **100% offline** with zero ads, analytics, telemetry, or accounts. `INTERNET` is declared solely to check `zahidhossin39/musely` GitHub Releases for app updates and open the APK URL in your browser (no `REQUEST_INSTALL_PACKAGES` permission or in-app downloader is used).
 
 | Permission | Android Version | Purpose |
 | :--- | :--- | :--- |
 | `READ_MEDIA_AUDIO` | Android 13+ (API 33+) | Read local audio files from `MediaStore` |
 | `READ_EXTERNAL_STORAGE` | Android 8.0–12 (API 26–32) | Read local audio files on pre-Android 13 devices |
+| `WRITE_EXTERNAL_STORAGE` | Android 8.0–10 (API 26–29) | User-confirmed audio file deletion on pre-Android 11 devices (`maxSdkVersion="29"`) |
+| `INTERNET` | Android 8.0+ (API 26+) | Check `zahidhossin39/musely` GitHub Releases for updates |
 | `FOREGROUND_SERVICE` | Android 9+ (API 28+) | Run a foreground service for continuous background playback |
 | `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | Android 14+ (API 34+) | Declare media-playback foreground service type for system controls |
-| `WAKE_LOCK` | Android 8.0+ | Prevent CPU sleep from interrupting audio playback |
+| `WAKE_LOCK` | Android 8.0+ (API 26+) | Prevent CPU sleep from interrupting audio playback |
 
 ## Tech Stack
 
@@ -98,10 +103,13 @@ Musely does **not** request the `INTERNET` permission—all scanning, artwork de
 │       │   ├── AndroidManifest.xml
 │       │   ├── kotlin/com/musely/app/
 │       │   │   ├── AlbumArt.kt        # Artwork pipeline & LRU cache
+│       │   │   ├── AppUpdater.kt      # GitHub Releases update checker
 │       │   │   ├── Library.kt         # MediaStore query, grouping & search
 │       │   │   ├── MainActivity.kt    # Edge-to-edge host activity
-│       │   │   ├── MainViewModel.kt   # Library state & MediaController bridge
+│       │   │   ├── MainViewModel.kt   # Library, playlist & MediaController state
 │       │   │   ├── PlaybackService.kt # Background MediaSessionService & ExoPlayer
+│       │   │   ├── PlaylistStore.kt   # Local JSON store for playlists, stars & hidden tracks
+│       │   │   ├── SongActions.kt     # File info metadata & MediaStore song deletion
 │       │   │   └── ui/                # Compose screens, mini player, components & M3 theme
 │       │   └── res/                   # Vector icons, adaptive/monochrome mipmaps, themes
 │       └── test/kotlin/com/musely/app/ # JUnit 4 unit tests
@@ -150,7 +158,14 @@ On Windows, replace `./gradlew` with `gradlew.bat`.
 
 ### Releases
 
-Pushing a version tag matching `v*` (for example `v1.0.0`) runs unit tests and Android Lint, builds `musely-<version>.apk`, generates and verifies a `.sha256` checksum, and publishes a GitHub Release automatically via [`.github/workflows/build.yml`](.github/workflows/build.yml).
+Pushing a version tag matching `v*` (for example `v2.0.0`) runs unit tests and Android Lint, builds the canonical `Musely.apk` alongside `musely-<version>.apk`, generates and verifies `.sha256` checksums, and publishes a GitHub Release automatically via [`.github/workflows/build.yml`](.github/workflows/build.yml).
+
+For persistent release signing in CI, configure these repository secrets:
+
+- `RELEASE_KEYSTORE_BASE64`
+- `RELEASE_KEYSTORE_PASSWORD`
+- `RELEASE_KEY_ALIAS`
+- `RELEASE_KEY_PASSWORD`
 
 ## Contributing & Governance
 

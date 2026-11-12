@@ -46,6 +46,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.musely.app.AlbumArt
 import com.musely.app.MainViewModel
@@ -57,9 +58,13 @@ import com.musely.app.ui.theme.LocalSpotlight
 private const val PAUSED_ART_SCALE = 0.88f
 
 @Composable
-fun NowPlayingScreen(vm: MainViewModel, state: PlaybackState, onClose: () -> Unit) {
+fun NowPlayingScreen(vm: MainViewModel, songActions: SongActionsUi, onClose: () -> Unit) {
+    val state by vm.playback.collectAsStateWithLifecycle()
+    val starredIds by vm.starredIds.collectAsStateWithLifecycle()
     val song = state.song ?: return
+    val isStarred = song.id in starredIds
     val colors = MaterialTheme.colorScheme
+    val spotlight = LocalSpotlight.current
     // The cover breathes: full size while playing, settles back when paused.
     val artScale by animateFloatAsState(
         if (state.isPlaying) 1f else PAUSED_ART_SCALE,
@@ -93,16 +98,43 @@ fun NowPlayingScreen(vm: MainViewModel, state: PlaybackState, onClose: () -> Uni
                     corner = 28.dp,
                 )
             }
-            Column(Modifier.fillMaxWidth()) {
-                Text(song.title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    song.artist,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = colors.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(song.title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        song.artist,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = colors.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Spacer(Modifier.width(4.dp))
+                IconButton(onClick = { songActions.toggleStar(song) }) {
+                    Icon(
+                        painterResource(if (isStarred) R.drawable.ic_star else R.drawable.ic_star_outline),
+                        contentDescription = if (isStarred) "Remove from Liked Music" else "Add to Liked Music",
+                        tint = if (isStarred) spotlight.container else colors.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = { songActions.openAddToPlaylist(song) }) {
+                    Icon(
+                        painterResource(R.drawable.ic_playlist_add),
+                        contentDescription = "Add to playlist",
+                        tint = colors.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = { songActions.openMenu(song, null) }) {
+                    Icon(
+                        painterResource(R.drawable.ic_more_vert),
+                        contentDescription = "More options",
+                        tint = colors.onSurfaceVariant,
+                    )
+                }
             }
             Spacer(Modifier.height(16.dp))
             SeekBar(vm, state, song)

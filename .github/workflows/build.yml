@@ -40,8 +40,45 @@ jobs:
         with:
           cache-provider: basic
 
+      - name: Prepare release signing keystore
+        id: signing
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          if [[ -n "$RELEASE_KEYSTORE_BASE64" && -n "$RELEASE_KEYSTORE_PASSWORD" && -n "$RELEASE_KEY_ALIAS" && -n "$RELEASE_KEY_PASSWORD" ]]; then
+            keystore_path="${RUNNER_TEMP}/musely-release.keystore"
+            printf '%s' "$RELEASE_KEYSTORE_BASE64" | tr -d '\n\r' | base64 -d > "$keystore_path"
+            chmod 600 "$keystore_path"
+            echo "keystore_path=${keystore_path}" >> "$GITHUB_OUTPUT"
+            echo "has_release_signing=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Release signing secrets are not configured; falling back to debug signing."
+            echo "has_release_signing=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run unit tests, Android Lint, and build release APK
-        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleRelease
+        env:
+          MUSELY_KEYSTORE_PATH: ${{ steps.signing.outputs.keystore_path }}
+          MUSELY_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          MUSELY_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          MUSELY_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          version_code=$(( 4 + GITHUB_RUN_NUMBER ))
+          gradle_args=(-PversionCode="$version_code")
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            gradle_args+=(-PversionName="${GITHUB_REF_NAME#v}")
+          fi
+          ./gradlew --no-daemon "${gradle_args[@]}" testDebugUnitTest lintDebug assembleRelease
+
+      - name: Remove temporary signing keystore
+        if: always()
+        run: |
+          if [[ -f "${RUNNER_TEMP}/musely-release.keystore" ]]; then
+            shred -u "${RUNNER_TEMP}/musely-release.keystore" 2>/dev/null || rm -f "${RUNNER_TEMP}/musely-release.keystore"
+          fi
 
       - name: Upload test & lint reports
         if: always()
@@ -59,24 +96,24 @@ jobs:
           shopt -s nullglob
           apks=(app/build/outputs/apk/release/*.apk)
           (( ${#apks[@]} == 1 )) || { echo "Expected 1 release APK, found ${#apks[@]}"; exit 1; }
-          version="${GITHUB_REF_NAME#v}"
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            gradle_version=$(sed -nE 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' app/build.gradle.kts | head -n1)
-            if [[ -n "$gradle_version" && "$gradle_version" != "$version" ]]; then
-              echo "::warning file=app/build.gradle.kts::Tag version '${version}' differs from app versionName '${gradle_version}'."
-            fi
+            version="${GITHUB_REF_NAME#v}"
           else
             version="build-${GITHUB_SHA::7}"
           fi
+          canonical_apk="Musely.apk"
           apk_file="musely-${version}.apk"
+          cp "${apks[0]}" "$canonical_apk"
           mv "${apks[0]}" "$apk_file"
+          sha256sum "$canonical_apk" > "${canonical_apk}.sha256"
           sha256sum "$apk_file" > "${apk_file}.sha256"
+          sha256sum -c "${canonical_apk}.sha256"
           sha256sum -c "${apk_file}.sha256"
           size_bytes=$(stat -c%s "$apk_file")
           size_mb=$(awk -v b="$size_bytes" 'BEGIN { printf "%.2f", b / 1048576 }')
           sha256=$(cut -d' ' -f1 "${apk_file}.sha256")
           {
-            echo "- **APK:** \`${apk_file}\` (${size_mb} MB)"
+            echo "- **APKs:** \`${canonical_apk}\`, \`${apk_file}\` (${size_mb} MB)"
             echo "- **SHA-256:** \`${sha256}\`"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
@@ -85,6 +122,8 @@ jobs:
         with:
           name: musely-release-apk
           path: |
+            Musely.apk
+            Musely.apk.sha256
             musely-*.apk
             musely-*.apk.sha256
           if-no-files-found: error
@@ -115,11 +154,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="${GITHUB_REF_NAME#v}"
+          canonical_apk="Musely.apk"
+          canonical_sha="${canonical_apk}.sha256"
           apk_file="musely-${version}.apk"
           sha_file="${apk_file}.sha256"
+          [[ -f "dist/$canonical_apk" ]] || { echo "Missing release APK: dist/$canonical_apk"; exit 1; }
+          [[ -f "dist/$canonical_sha" ]] || { echo "Missing checksum file: dist/$canonical_sha"; exit 1; }
           [[ -f "dist/$apk_file" ]] || { echo "Missing release APK: dist/$apk_file"; exit 1; }
           [[ -f "dist/$sha_file" ]] || { echo "Missing checksum file: dist/$sha_file"; exit 1; }
-          (cd dist && sha256sum -c "$sha_file")
+          (cd dist && sha256sum -c "$canonical_sha" && sha256sum -c "$sha_file")
 
           release_args=(--title "Musely $GITHUB_REF_NAME" --verify-tag)
           if [[ "$GITHUB_REF_NAME" == *-* ]]; then
@@ -155,7 +198,7 @@ jobs:
                 echo "## Musely ${version}"
                 cat "$extracted_notes"
                 echo ""
-                echo "**Install:** download \`${apk_file}\` below, verify \`${sha_file}\` if desired, open the APK on your phone, and allow installs from your browser if asked."
+                echo "**Install:** download \`${canonical_apk}\` (or \`${apk_file}\`) below, verify \`${canonical_sha}\` if desired, open the APK on your phone, and allow installs from your browser if asked."
               } > "$generated_notes"
               notes_file="$generated_notes"
             fi
@@ -170,7 +213,7 @@ jobs:
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             is_draft=$(gh release view "$GITHUB_REF_NAME" --json isDraft -q .isDraft)
             if [[ "$is_draft" == "true" ]]; then
-              gh release upload "$GITHUB_REF_NAME" "dist/$apk_file" "dist/$sha_file" --clobber
+              gh release upload "$GITHUB_REF_NAME" "dist/$canonical_apk" "dist/$canonical_sha" "dist/$apk_file" "dist/$sha_file" --clobber
               edit_args=(--draft=false --title "Musely $GITHUB_REF_NAME")
               [[ "$GITHUB_REF_NAME" == *-* ]] && edit_args+=(--prerelease)
               [[ -n "$notes_file" ]] && edit_args+=(--notes-file "$notes_file")
@@ -181,6 +224,6 @@ jobs:
               exit 1
             fi
           else
-            gh release create "$GITHUB_REF_NAME" "dist/$apk_file" "dist/$sha_file" "${release_args[@]}" "${notes_args[@]}"
+            gh release create "$GITHUB_REF_NAME" "dist/$canonical_apk" "dist/$canonical_sha" "dist/$apk_file" "dist/$sha_file" "${release_args[@]}" "${notes_args[@]}"
           fi
           rm -f "$generated_notes"

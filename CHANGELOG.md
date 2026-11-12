@@ -7,13 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-13
+
 ### Added
-- Repository hygiene configuration (`.editorconfig`, `.gitattributes`, expanded `.gitignore`)
-- Community health and governance documentation (`README.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `CHANGELOG.md`)
-- GitHub Issue Forms, Pull Request template, `CODEOWNERS`, and grouped weekly `dependabot.yml` updates for Gradle and GitHub Actions
+- Custom playlists with YouTube-Music-inspired 2×2 cover artwork collages, multi-song add, track reordering, rename, and delete (`PlaylistStore`)
+- Pinned **Liked Music** system playlist backed by starred songs across library, detail, and Now Playing views
+- GitHub Releases auto-updater (`AppUpdater`) with top-bar update icon, unobtrusive availability badge, SemVer comparison, 403/429 HTML redirect fallback, and browser handoff via `Intent.ACTION_VIEW`
+- Per-song management actions (`SongActions`): File Info sheet (`MediaStore` and `MediaMetadataRetriever` metadata), Hide/Unhide from library, and user-confirmed Delete from device storage
+- Unit tests covering playlists, metadata formatting, and update checking
+- Repository hygiene, community health/governance docs, issue/PR templates, `CODEOWNERS`, and `dependabot.yml`
 
 ### Changed
-- Hardened `.github/workflows/build.yml` with scoped triggers, least-privilege permissions, PR concurrency cancellation, `lintDebug`, test/lint report artifacts, `.apk.sha256` checksums, Node 24 actions, and guarded release-notes/pre-release publishing
+- Declared `INTERNET` permission (scoped solely to `zahidhossin39/musely` GitHub Releases update checks) and `WRITE_EXTERNAL_STORAGE` (`maxSdkVersion="29"`) for user-confirmed file deletion on Android 8.0–10
+- Hardened `.github/workflows/build.yml` with persistent release keystore signing (`RELEASE_KEYSTORE_*` secrets with debug fallback for PRs/forks), `lintDebug`, test/lint report artifacts, canonical `Musely.apk` alongside `musely-<version>.apk`, and `.sha256` checksums
+- Updated default `versionCode` to `4` and `versionName` to `2.0.0` in `app/build.gradle.kts`
 
 ## [1.0.0] - 2026-11-12
 
@@ -46,7 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial Android project skeleton (originally named Waveloop, `com.waveloop.player`) with Jetpack Compose UI, MediaStore library loading, in-memory search, and background Media3 `PlaybackService`
 - MIT `LICENSE` and initial GitHub Actions build workflow
 
-[Unreleased]: https://github.com/zahidhossin39/musely/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/zahidhossin39/musely/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/zahidhossin39/musely/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/zahidhossin39/musely/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/zahidhossin39/musely/compare/0361685...v0.2.0
 [0.1.0]: https://github.com/zahidhossin39/musely/compare/659d5f5...0361685

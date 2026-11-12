@@ -6,22 +6,22 @@ Security updates are provided for the latest release line:
 
 | Version | Supported |
 | :--- | :--- |
-| `1.0.x` | :white_check_mark: Supported |
-| `< 1.0.0` | :x: Unsupported |
+| `2.0.x` | :white_check_mark: Supported |
+| `< 2.0.0` | :x: Unsupported |
 
 ## Privacy & Threat Model
 
-Musely is designed as an **offline-only** Android audio player:
+Musely is designed as an **offline-first** Android audio player:
 
-- The app does **not** declare the `INTERNET` permission in [`AndroidManifest.xml`](app/src/main/AndroidManifest.xml).
-- Audio library scanning and artwork loading operate strictly on local `MediaStore` and embedded audio file data.
-- No telemetry, crash reporting SDKs, ads, or accounts are included.
+- Audio library scanning, artwork loading, playlists, and playback operate strictly on-device using local `MediaStore` and embedded audio file data.
+- The `INTERNET` permission in [`AndroidManifest.xml`](app/src/main/AndroidManifest.xml) is scoped solely to read-only update checks against `zahidhossin39/musely` GitHub Releases (and opening the release `.apk` URL in your system browser via `Intent.ACTION_VIEW`—no `REQUEST_INSTALL_PACKAGES` or in-app downloader is used).
+- No background telemetry, crash reporting SDKs, ads, or accounts are included.
 
 ## Release APK Signing Notice
 
 - Download APKs **only** from the official [GitHub Releases](https://github.com/zahidhossin39/musely/releases) page.
-- As documented in [`app/build.gradle.kts`](app/build.gradle.kts), current CI/test release APKs are signed with the Android debug keystore (`signingConfigs.getByName("debug")`) so test builds can be installed directly without external signing secrets.
-- Future releases produced by CI include a `.sha256` checksum alongside the `.apk` asset so downloads can be verified before installation.
+- As configured in [`app/build.gradle.kts`](app/build.gradle.kts) and [`.github/workflows/build.yml`](.github/workflows/build.yml), CI signs release APKs with a persistent release keystore when `RELEASE_KEYSTORE_BASE64`, `RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS`, and `RELEASE_KEY_PASSWORD` secrets are configured (falling back to the Android debug keystore on PRs or forks).
+- Releases produced by CI include `.sha256` checksums alongside `Musely.apk` and `musely-<version>.apk` so downloads can be verified before installation.
 
 ## Reporting a Vulnerability
 

@@ -3,6 +3,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+fun resolveSigningParam(name: String): String? =
+    (project.findProperty(name) as String?)?.takeIf { it.isNotBlank() }
+        ?: System.getenv(name)?.takeIf { it.isNotBlank() }
+
 android {
     namespace = "com.musely.app"
     compileSdk = 37
@@ -11,12 +15,34 @@ android {
         applicationId = "com.musely.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0.0"
+        versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 4
+        versionName = (project.findProperty("versionName") as String?) ?: "2.0.0"
     }
 
     androidResources {
         localeFilters += "en"
+    }
+
+    val releaseKeystorePath = resolveSigningParam("MUSELY_KEYSTORE_PATH")
+    val releaseKeystorePassword = resolveSigningParam("MUSELY_KEYSTORE_PASSWORD")
+    val releaseKeyAlias = resolveSigningParam("MUSELY_KEY_ALIAS")
+    val releaseKeyPassword = resolveSigningParam("MUSELY_KEY_PASSWORD")
+    val hasReleaseSigning = listOf(
+        releaseKeystorePath,
+        releaseKeystorePassword,
+        releaseKeyAlias,
+        releaseKeyPassword,
+    ).all { it != null } && file(releaseKeystorePath!!).isFile
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseKeystorePath!!)
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
@@ -24,9 +50,12 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Signed with the debug key so test builds install directly.
-            // Replace with a private release keystore before publishing.
-            signingConfig = signingConfigs.getByName("debug")
+            // Use persistent release keystore when configured; fall back to debug for PRs/forks.
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
@@ -63,4 +92,5 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.11.1")
     implementation("androidx.media3:media3-session:1.11.1")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }
