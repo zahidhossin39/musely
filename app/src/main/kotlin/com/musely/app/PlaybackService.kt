@@ -93,6 +93,7 @@ class PlaybackService : MediaSessionService() {
         override fun decodeBitmap(data: ByteArray): ListenableFuture<Bitmap> =
             executor.submit(Callable {
                 decodeSampledBitmap(data, NOTIFICATION_ART_PX)
+                    ?.downscaleIfNeeded(NOTIFICATION_ART_PX)
                     ?: throw IllegalArgumentException("Could not decode cover image bytes")
             })
 
@@ -103,7 +104,7 @@ class PlaybackService : MediaSessionService() {
             })
 
         companion object {
-            private const val NOTIFICATION_ART_PX = 512
+            private const val NOTIFICATION_ART_PX = 384
         }
     }
 

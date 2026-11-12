@@ -19,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,6 +35,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 
 internal data class ArtKey(
@@ -54,6 +57,21 @@ internal fun computeInSampleSize(srcWidth: Int, srcHeight: Int, targetPx: Int): 
         sample *= 2
     }
     return sample
+}
+
+internal fun computeScaledDimensions(srcWidth: Int, srcHeight: Int, maxPx: Int): Pair<Int, Int>? {
+    if (srcWidth <= 0 || srcHeight <= 0 || maxPx <= 0) return null
+    val longest = maxOf(srcWidth, srcHeight)
+    if (longest <= maxPx) return null
+    val scale = maxPx.toFloat() / longest.toFloat()
+    val dstWidth = (srcWidth * scale).toInt().coerceAtLeast(1)
+    val dstHeight = (srcHeight * scale).toInt().coerceAtLeast(1)
+    return dstWidth to dstHeight
+}
+
+internal fun Bitmap.downscaleIfNeeded(maxPx: Int): Bitmap {
+    val (dstWidth, dstHeight) = computeScaledDimensions(width, height, maxPx) ?: return this
+    return Bitmap.createScaledBitmap(this, dstWidth, dstHeight, true)
 }
 
 internal fun Bitmap.toSoftwareBitmap(): Bitmap {
@@ -86,6 +104,8 @@ object ArtCache {
         override fun sizeOf(key: ArtKey, value: Bitmap) = value.byteCount
     }
     private val missing = HashSet<ArtSubject>()
+    private val _clearVersion = MutableStateFlow(0)
+    internal val clearVersion: StateFlow<Int> = _clearVersion
 
     internal fun key(albumId: Long, songId: Long?, large: Boolean): ArtKey =
         if (songId != null) ArtKey(isSong = true, id = songId, large = large)
@@ -101,7 +121,10 @@ object ArtCache {
 
     /** Clears negative-lookup cache so newly indexed or updated audio covers can be retried. */
     fun clearMissing() {
-        synchronized(missing) { missing.clear() }
+        synchronized(missing) {
+            missing.clear()
+            _clearVersion.value += 1
+        }
     }
 
     internal fun load(
@@ -133,19 +156,18 @@ object ArtCache {
      * Resolves cover art for [PlaybackService] notifications and MediaSession metadata.
      * Supports MediaStore audio track URIs, album URIs, legacy albumart URIs, and generic streams.
      */
-    fun loadFromUri(context: Context, uri: Uri, targetPx: Int = 512): Bitmap? {
+    fun loadFromUri(context: Context, uri: Uri, targetPx: Int = 384): Bitmap? {
         val uriText = uri.toString()
         val mediaPrefix = "${MediaStore.Audio.Media.EXTERNAL_CONTENT_URI}/"
         val albumPrefix = "${MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI}/"
         val legacyPrefix = "content://media/external/audio/albumart/"
 
-        return when {
+        val loaded = when {
             uriText.startsWith(mediaPrefix) -> {
                 val songId = runCatching { ContentUris.parseId(uri) }.getOrNull()
                 if (songId != null && songId >= 0L) {
-                    cache.get(ArtKey(isSong = true, id = songId, large = true))?.let { return it }
-                    val albumId = queryAlbumId(context, uri)
-                    loadForSong(context, songId, albumId, targetPx)
+                    cache.get(ArtKey(isSong = true, id = songId, large = true))
+                        ?: loadForSong(context, songId, queryAlbumId(context, uri), targetPx)
                 } else {
                     loadThumbnail(context, uri, targetPx) ?: loadEmbeddedArt(context, uri, targetPx)
                 }
@@ -159,7 +181,8 @@ object ArtCache {
                 }
             }
             else -> loadThumbnail(context, uri, targetPx) ?: decodeSampledStream(context, uri, targetPx)
-        }?.toSoftwareBitmap()
+        }
+        return loaded?.toSoftwareBitmap()?.downscaleIfNeeded(targetPx)
     }
 
     private fun loadForSong(context: Context, songId: Long, albumId: Long?, targetPx: Int): Bitmap? {
@@ -176,7 +199,7 @@ object ArtCache {
         targetPx: Int,
     ): Bitmap? {
         loadAlbumSources(context, albumId, targetPx)?.let { return it }
-        for (sid in fallbackSongIds.take(6)) {
+        for (sid in fallbackSongIds.take(12)) {
             val sUri = songUri(sid)
             val art = loadThumbnail(context, sUri, targetPx) ?: loadEmbeddedArt(context, sUri, targetPx)
             if (art != null) return art
@@ -196,7 +219,7 @@ object ArtCache {
     private fun loadThumbnail(context: Context, uri: Uri, targetPx: Int): Bitmap? {
         if (Build.VERSION.SDK_INT < 29) return null
         return try {
-            context.contentResolver.loadThumbnail(uri, Size(targetPx, targetPx), null)?.toSoftwareBitmap()
+            context.contentResolver.loadThumbnail(uri, Size(targetPx, targetPx), null).toSoftwareBitmap()
         } catch (_: Throwable) {
             null
         }
@@ -274,9 +297,10 @@ fun AlbumArt(
     val context = LocalContext.current.applicationContext
     val key = ArtCache.key(albumId, songId, large)
     val subject = ArtCache.subject(albumId, songId)
+    val clearVersion by ArtCache.clearVersion.collectAsState()
     var image by remember(key) { mutableStateOf(ArtCache.get(key)?.asImageBitmap()) }
 
-    LaunchedEffect(key, fallbackSongIds.firstOrNull()) {
+    LaunchedEffect(key, fallbackSongIds, clearVersion) {
         if (image == null && !ArtCache.isMissing(subject)) {
             image = withContext(Dispatchers.IO) {
                 ArtCache.load(context, key, subject, albumId, songId, fallbackSongIds, large)

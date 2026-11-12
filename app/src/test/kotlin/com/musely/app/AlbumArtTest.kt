@@ -53,8 +53,25 @@ class AlbumArtTest {
     }
 
     @Test
-    fun clearMissing_resetsNegativeLookupTracking() {
+    fun clearMissing_resetsNegativeLookupTrackingAndAdvancesClearVersion() {
+        val before = ArtCache.clearVersion.value
         ArtCache.clearMissing()
         assertFalse(ArtCache.isMissing(ArtCache.subject(albumId = 10L, songId = 20L)))
+        assertEquals(before + 1, ArtCache.clearVersion.value)
+    }
+
+    @Test
+    fun computeScaledDimensions_preservesAspectRatioAndSkipsWhenWithinBounds() {
+        assertNull(computeScaledDimensions(384, 384, 384))
+        assertNull(computeScaledDimensions(256, 384, 384))
+        assertNull(computeScaledDimensions(0, 500, 384))
+        assertNull(computeScaledDimensions(500, -1, 384))
+        assertNull(computeScaledDimensions(500, 500, 0))
+
+        assertEquals(384 to 384, computeScaledDimensions(1799, 1799, 384))
+        assertEquals(384 to 192, computeScaledDimensions(1000, 500, 384))
+        assertEquals(192 to 384, computeScaledDimensions(500, 1000, 384))
+        // Extreme aspect ratio clamps smaller side to at least 1px.
+        assertEquals(384 to 1, computeScaledDimensions(4000, 2, 384))
     }
 }
