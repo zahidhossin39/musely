@@ -1,0 +1,23 @@
+# Normalize text line endings to LF in the repository index.
+* text=auto eol=lf
+
+# Shell scripts and the Unix Gradle wrapper must keep LF for Linux CI runners.
+gradlew text eol=lf
+*.sh text eol=lf
+
+# Windows batch scripts must keep CRLF.
+gradlew.bat text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets and archives.
+*.png binary
+*.webp binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.jar binary
+*.apk binary
+*.aab binary
+*.keystore binary
+*.jks binary

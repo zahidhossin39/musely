@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerability
+    url: https://github.com/zahidhossin39/musely/blob/main/SECURITY.md
+    about: Please follow our security policy to report vulnerabilities privately instead of opening a public issue.
+  - name: Download Latest Release
+    url: https://github.com/zahidhossin39/musely/releases/latest
+    about: Grab the latest APK build and verify whether your issue is already resolved.
