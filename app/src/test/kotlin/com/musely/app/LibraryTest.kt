@@ -1,6 +1,8 @@
 package com.musely.app
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -14,6 +16,7 @@ class LibraryTest {
         albumId: Long = 10L,
         durationMs: Long = 180_000L,
         track: Int = 1,
+        isVideo: Boolean = false,
     ) = Song(
         id = id,
         title = title,
@@ -22,6 +25,7 @@ class LibraryTest {
         albumId = albumId,
         durationMs = durationMs,
         track = track,
+        isVideo = isVideo,
     )
 
     @Test
@@ -77,5 +81,61 @@ class LibraryTest {
         assertEquals(listOf(songs[0]), songs.search("luna nightfall"))
         assertEquals(listOf(songs[0]), songs.search("ECHO"))
         assertTrue(songs.search("luna morning").isEmpty())
+    }
+
+    @Test
+    fun videoTrackId_andMediaStoreId_areBijectiveAndSeparateFromAudioIds() {
+        val sampleIds = listOf(0L, 1L, 42L, 999_999L, Long.MAX_VALUE)
+        for (mediaId in sampleIds) {
+            val encoded = videoTrackId(mediaId)
+            assertTrue("Expected negative track ID for $mediaId", encoded < 0L)
+            assertTrue(isVideoTrackId(encoded))
+            assertFalse(isVideoTrackId(mediaId))
+            assertEquals(mediaId, mediaStoreIdFromTrackId(encoded))
+            assertEquals(mediaId, mediaStoreIdFromTrackId(mediaId))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            videoTrackId(-1L)
+        }
+    }
+
+    @Test
+    fun resolveVideoMetadata_handlesBlankAndUnknownValues() {
+        assertEquals("Concert Clip", resolveVideoTitle(null, "Concert Clip.mp4"))
+        assertEquals("Live Session", resolveVideoTitle("  Live Session  ", "clip.mp4"))
+        assertEquals("Unknown video", resolveVideoTitle("", "   "))
+        assertEquals(".hidden", resolveVideoTitle(null, ".hidden"))
+
+        assertEquals("Camera", resolveVideoArtist("<unknown>", "Camera"))
+        assertEquals("Artist X", resolveVideoArtist("  Artist X ", "Downloads"))
+        assertEquals("Video audio", resolveVideoArtist(null, " "))
+
+        assertEquals("Movies", resolveVideoAlbum(null, "Movies"))
+        assertEquals("Custom Album", resolveVideoAlbum("Custom Album", "Movies"))
+        assertEquals("Video Audio", resolveVideoAlbum("<unknown>", ""))
+    }
+
+    @Test
+    fun toAlbums_andToArtists_excludeVideos_whileSearchIncludesVideos() {
+        val tracks = listOf(
+            song(id = 1L, title = "Audio Track", artist = "Band A", album = "Record 1", albumId = 10L),
+            song(
+                id = videoTrackId(5L),
+                title = "Live Encore",
+                artist = "Camera",
+                album = "Movies",
+                albumId = 20L,
+                isVideo = true,
+            ),
+        )
+
+        val albums = tracks.toAlbums()
+        assertEquals(1, albums.size)
+        assertEquals(10L, albums.single().id)
+
+        val artists = tracks.toArtists()
+        assertEquals(listOf(Artist("Band A", 1)), artists)
+
+        assertEquals(listOf(tracks[1]), tracks.search("encore movies"))
     }
 }

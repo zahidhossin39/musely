@@ -12,14 +12,15 @@ import java.util.Locale
 
 class FormatTest {
 
-    private fun song(durationMs: Long) = Song(
-        id = 1L,
+    private fun song(durationMs: Long, isVideo: Boolean = false) = Song(
+        id = if (isVideo) -2L else 1L,
         title = "Track",
         artist = "Artist",
         album = "Album",
         albumId = 1L,
         durationMs = durationMs,
         track = 1,
+        isVideo = isVideo,
     )
 
     @Test
@@ -94,5 +95,24 @@ class FormatTest {
         val actual = formatDateSeconds(epochSec)
         assertTrue(actual.isNotBlank())
         assertEquals(expected, actual)
+    }
+
+    @Test
+    fun videoCount_trackCount_andCollectionSummary_handleAudioVideoAndMixedLists() {
+        assertEquals("0 videos", videoCount(0))
+        assertEquals("1 video", videoCount(1))
+        assertEquals("4 videos", videoCount(4))
+
+        assertEquals("0 tracks", trackCount(0))
+        assertEquals("1 track", trackCount(1))
+        assertEquals("3 tracks", trackCount(3))
+
+        assertEquals("0 songs", collectionSummary(emptyList()))
+        assertEquals("2 songs", collectionSummary(listOf(song(1_000L), song(2_000L))))
+        assertEquals("2 videos", collectionSummary(listOf(song(1_000L, isVideo = true), song(2_000L, isVideo = true))))
+        assertEquals(
+            "3 tracks",
+            collectionSummary(listOf(song(1_000L), song(2_000L), song(3_000L, isVideo = true))),
+        )
     }
 }

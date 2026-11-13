@@ -1,12 +1,10 @@
 package com.musely.app
 
 import android.app.PendingIntent
-import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
-import android.provider.MediaStore
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -109,7 +107,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     private class SessionCallback : MediaSession.Callback {
-        /** Controllers send only the song id; the playable URI is rebuilt here. */
+        /** Controllers send only the track id; the playable audio or video URI is rebuilt here. */
         override fun onAddMediaItems(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
@@ -118,7 +116,7 @@ class PlaybackService : MediaSessionService() {
             mediaItems.map { item ->
                 val id = item.mediaId.toLongOrNull() ?: return@map item
                 item.buildUpon()
-                    .setUri(ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id))
+                    .setUri(trackUri(id))
                     .build()
             },
         )

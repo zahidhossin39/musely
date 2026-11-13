@@ -154,11 +154,12 @@ object ArtCache {
 
     /**
      * Resolves cover art for [PlaybackService] notifications and MediaSession metadata.
-     * Supports MediaStore audio track URIs, album URIs, legacy albumart URIs, and generic streams.
+     * Supports MediaStore audio track URIs, video track URIs, album URIs, legacy albumart URIs, and generic streams.
      */
     fun loadFromUri(context: Context, uri: Uri, targetPx: Int = 384): Bitmap? {
         val uriText = uri.toString()
         val mediaPrefix = "${MediaStore.Audio.Media.EXTERNAL_CONTENT_URI}/"
+        val videoPrefix = "${MediaStore.Video.Media.EXTERNAL_CONTENT_URI}/"
         val albumPrefix = "${MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI}/"
         val legacyPrefix = "content://media/external/audio/albumart/"
 
@@ -170,6 +171,18 @@ object ArtCache {
                         ?: loadForSong(context, songId, queryAlbumId(context, uri), targetPx)
                 } else {
                     loadThumbnail(context, uri, targetPx) ?: loadEmbeddedArt(context, uri, targetPx)
+                }
+            }
+            uriText.startsWith(videoPrefix) -> {
+                val videoId = runCatching { ContentUris.parseId(uri) }.getOrNull()
+                if (videoId != null && videoId >= 0L) {
+                    val trackId = videoTrackId(videoId)
+                    cache.get(ArtKey(isSong = true, id = trackId, large = true))
+                        ?: loadForVideo(context, videoId, targetPx)
+                } else {
+                    loadThumbnail(context, uri, targetPx)
+                        ?: loadEmbeddedArt(context, uri, targetPx)
+                        ?: loadVideoFrame(context, uri, targetPx)
                 }
             }
             uriText.startsWith(albumPrefix) || uriText.startsWith(legacyPrefix) -> {
@@ -186,10 +199,20 @@ object ArtCache {
     }
 
     private fun loadForSong(context: Context, songId: Long, albumId: Long?, targetPx: Int): Bitmap? {
+        if (isVideoTrackId(songId)) {
+            return loadForVideo(context, mediaStoreIdFromTrackId(songId), targetPx)
+        }
         val sUri = songUri(songId)
         return loadThumbnail(context, sUri, targetPx)
             ?: loadEmbeddedArt(context, sUri, targetPx)
             ?: albumId?.let { loadAlbumSources(context, it, targetPx) }
+    }
+
+    private fun loadForVideo(context: Context, videoId: Long, targetPx: Int): Bitmap? {
+        val vUri = videoUri(videoId)
+        return loadThumbnail(context, vUri, targetPx)
+            ?: loadEmbeddedArt(context, vUri, targetPx)
+            ?: loadVideoFrame(context, vUri, targetPx)
     }
 
     private fun loadForAlbum(
@@ -225,25 +248,47 @@ object ArtCache {
         }
     }
 
+    private fun setRetrieverDataSource(context: Context, retriever: MediaMetadataRetriever, uri: Uri): Boolean =
+        try {
+            retriever.setDataSource(context, uri)
+            true
+        } catch (_: Throwable) {
+            try {
+                context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                    retriever.setDataSource(pfd.fileDescriptor)
+                    true
+                } ?: false
+            } catch (_: Throwable) {
+                false
+            }
+        }
+
     private fun loadEmbeddedArt(context: Context, songUri: Uri, targetPx: Int): Bitmap? {
         val retriever = MediaMetadataRetriever()
         try {
-            val ready = try {
-                retriever.setDataSource(context, songUri)
-                true
-            } catch (_: Throwable) {
-                try {
-                    context.contentResolver.openFileDescriptor(songUri, "r")?.use { pfd ->
-                        retriever.setDataSource(pfd.fileDescriptor)
-                        true
-                    } ?: false
-                } catch (_: Throwable) {
-                    false
-                }
-            }
-            if (!ready) return null
+            if (!setRetrieverDataSource(context, retriever, songUri)) return null
             val bytes = retriever.embeddedPicture ?: return null
             return decodeSampledBitmap(bytes, targetPx)
+        } catch (_: Throwable) {
+            return null
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
+
+    private fun loadVideoFrame(context: Context, videoUri: Uri, targetPx: Int): Bitmap? {
+        val retriever = MediaMetadataRetriever()
+        try {
+            if (!setRetrieverDataSource(context, retriever, videoUri)) return null
+            val px = targetPx.coerceAtLeast(1)
+            val raw = if (Build.VERSION.SDK_INT >= 27) {
+                runCatching {
+                    retriever.getScaledFrameAtTime(-1L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, px, px)
+                }.getOrNull() ?: retriever.frameAtTime
+            } else {
+                retriever.frameAtTime
+            } ?: return null
+            return raw.toSoftwareBitmap().downscaleIfNeeded(px)
         } catch (_: Throwable) {
             return null
         } finally {
@@ -293,6 +338,7 @@ fun AlbumArt(
     fallbackSongIds: List<Long> = emptyList(),
     large: Boolean = false,
     corner: Dp = 12.dp,
+    isVideo: Boolean = songId != null && isVideoTrackId(songId),
 ) {
     val context = LocalContext.current.applicationContext
     val key = ArtCache.key(albumId, songId, large)
@@ -325,7 +371,7 @@ fun AlbumArt(
             Image(art, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
             Icon(
-                painterResource(R.drawable.ic_note),
+                painterResource(if (isVideo) R.drawable.ic_video else R.drawable.ic_note),
                 null,
                 Modifier.fillMaxSize(0.4f),
                 tint = colors.primary.copy(alpha = 0.85f),

@@ -8,6 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.json.JSONObject
 import java.io.File
 
 class PlaylistStoreTest {
@@ -229,5 +230,107 @@ class PlaylistStoreTest {
         assertEquals(listOf(33L), loaded.starredSongIds)
         assertEquals(setOf(44L), loaded.hiddenSongIds)
         assertFalse(File(dir, "${PlaylistStore.DEFAULT_FILE_NAME}.tmp").exists())
+    }
+
+    @Test
+    fun encodeAndDecodeStateJson_preservesInterleavedAudioAndVideoOrderAndLegacyFields() {
+        val v5 = videoTrackId(5L)
+        val v0 = videoTrackId(0L)
+        val v9 = videoTrackId(9L)
+        val v3 = videoTrackId(3L)
+        val original = LibraryUserState(
+            playlists = listOf(
+                Playlist(
+                    id = "pl-mix",
+                    name = "Concert Mix",
+                    songIds = listOf(10L, v5, 20L, v0),
+                    isSystem = false,
+                    createdAtMs = 555_000L,
+                ),
+            ),
+            starredSongIds = listOf(v9, 42L),
+            hiddenSongIds = setOf(7L, v3),
+        )
+
+        assertEquals("a:10", encodeTrackKey(10L))
+        assertEquals("v:5", encodeTrackKey(v5))
+        assertEquals(10L, decodeTrackKey("a:10"))
+        assertEquals(v5, decodeTrackKey("v:5"))
+        assertNull(decodeTrackKey("x:1"))
+        assertNull(decodeTrackKey("a:-1"))
+        assertNull(decodeTrackKey("v:-1"))
+
+        val json = encodeStateJson(original)
+        val decoded = decodeStateJson(json)
+        assertEquals(original, decoded)
+
+        // Legacy fields retain only non-negative audio IDs so v2.0.0 decoders stay valid
+        val obj = JSONObject(json)
+        val plObj = obj.getJSONArray("playlists").getJSONObject(0)
+        assertEquals("[10,20]", plObj.getJSONArray("songIds").toString())
+        assertEquals("[\"a:10\",\"v:5\",\"a:20\",\"v:0\"]", plObj.getJSONArray("trackKeys").toString())
+
+        val partialWithTrackKeys = """
+            {
+              "playlists": [
+                {"id": "mix", "name": "Mix", "songIds": [99], "trackKeys": ["v:5", "bad", "a:-2", "v:-1", "a:10", "v:5"]}
+              ],
+              "starredTrackKeys": ["v:9", "nope", "a:42"],
+              "hiddenTrackKeys": ["a:7", "v:3", "z:1"]
+            }
+        """.trimIndent()
+        val parsed = decodeStateJson(partialWithTrackKeys)
+        assertEquals(listOf(v5, 10L), parsed.playlists.single().songIds)
+        assertEquals(listOf(v9, 42L), parsed.starredSongIds)
+        assertEquals(setOf(7L, v3), parsed.hiddenSongIds)
+    }
+
+    @Test
+    fun pruneSongs_respectsPruneAudioAndPruneVideosFlags() {
+        val store = newStore()
+        val pl = store.createPlaylist("Audio + Video")!!
+        val v10 = videoTrackId(10L)
+        val v20 = videoTrackId(20L)
+        store.addSongsToPlaylist(pl.id, listOf(1L, v10, 2L, v20))
+        store.setStarred(2L, true)
+        store.setStarred(v10, true)
+        store.hideSong(2L)
+        store.hideSong(v20)
+
+        // Audio permission granted, video permission not granted -> pruneAudio = true, pruneVideos = false
+        assertTrue(store.pruneSongs(existingSongIds = setOf(1L), pruneAudio = true, pruneVideos = false))
+        var state = store.loadState()
+        assertEquals(listOf(1L, v10, v20), state.playlists.single().songIds)
+        assertEquals(listOf(v10), state.starredSongIds)
+        assertEquals(setOf(v20), state.hiddenSongIds)
+
+        // Video permission granted with only v10 still present -> pruneVideos = true drops v20
+        assertTrue(store.pruneSongs(existingSongIds = setOf(1L, v10), pruneAudio = true, pruneVideos = true))
+        state = store.loadState()
+        assertEquals(listOf(1L, v10), state.playlists.single().songIds)
+        assertEquals(listOf(v10), state.starredSongIds)
+        assertTrue(state.hiddenSongIds.isEmpty())
+    }
+
+    @Test
+    fun mixedAudioAndVideoPlaylistCrud_persistsStarReorderAndDelete() {
+        val dir = tempFolder.newFolder("mixed-state")
+        val v7 = videoTrackId(7L)
+        val writer = newStore(dir = dir)
+        val pl = writer.createPlaylist("Clips")!!
+
+        assertTrue(writer.addSongsToPlaylist(pl.id, listOf(100L, v7)))
+        assertTrue(writer.toggleStar(v7))
+        assertTrue(writer.moveSongInPlaylist(pl.id, 1, 0))
+
+        val reader = newStore(dir = dir)
+        val loaded = reader.loadState()
+        assertEquals(listOf(v7, 100L), loaded.playlists.single().songIds)
+        assertEquals(listOf(v7), loaded.starredSongIds)
+
+        assertTrue(reader.removeDeletedSong(v7))
+        val afterDelete = newStore(dir = dir).loadState()
+        assertEquals(listOf(100L), afterDelete.playlists.single().songIds)
+        assertTrue(afterDelete.starredSongIds.isEmpty())
     }
 }

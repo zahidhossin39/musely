@@ -59,17 +59,28 @@ fun MiniPlayer(vm: MainViewModel, state: PlaybackState, onOpen: () -> Unit, modi
                 Modifier.padding(start = 10.dp, end = 6.dp, top = 10.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                AlbumArt(song.albumId, Modifier.size(48.dp), songId = song.id, corner = 14.dp)
+                AlbumArt(song.albumId, Modifier.size(48.dp), songId = song.id, corner = 14.dp, isVideo = song.isVideo)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(song.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(
-                        song.artist,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (song.isVideo) {
+                            Icon(
+                                painterResource(R.drawable.ic_video),
+                                contentDescription = "Video audio",
+                                modifier = Modifier.size(12.dp),
+                                tint = colors.primary,
+                            )
+                            Spacer(Modifier.width(4.dp))
+                        }
+                        Text(
+                            song.artist,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 FilledIconButton(
                     onClick = vm::togglePlay,

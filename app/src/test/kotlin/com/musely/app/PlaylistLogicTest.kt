@@ -84,4 +84,22 @@ class PlaylistLogicTest {
         )
         assertEquals(error, resolveUpdateStatusAfterCheck(available, error, isManual = true))
     }
+
+    @Test
+    fun `mapVisibleMoveToRawIndices works with mixed audio and negative video track IDs`() {
+        val v1 = videoTrackId(1L)
+        val v2 = videoTrackId(2L)
+        val raw = listOf(10L, v1, 20L, v2) // v1 is hidden
+        val visible = listOf(10L, 20L, v2)
+
+        assertEquals(0 to 3, mapVisibleMoveToRawIndices(raw, visible, 0, 2))
+        assertEquals(3 to 0, mapVisibleMoveToRawIndices(raw, visible, 2, 0))
+    }
+
+    @Test
+    fun `findMatchingQueueIndicesDescending matches negative video track IDs`() {
+        val v4 = videoTrackId(4L)
+        val mediaIds = listOf("10", v4.toString(), "20", v4.toString())
+        assertEquals(listOf(3, 1), findMatchingQueueIndicesDescending(mediaIds, v4))
+    }
 }

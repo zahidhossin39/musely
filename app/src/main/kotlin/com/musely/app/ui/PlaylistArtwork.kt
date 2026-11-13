@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.musely.app.AlbumArt
 import com.musely.app.R
+import com.musely.app.isVideoTrackId
 import com.musely.app.ui.theme.MuselyLime
 import com.musely.app.ui.theme.MuselyViolet
 
@@ -92,6 +93,7 @@ fun PlaylistArtwork(
                     AlbumArt(
                         albumId = selected[0].second,
                         songId = selected[0].first,
+                        isVideo = isVideoTrackId(selected[0].first),
                         corner = 0.dp,
                         modifier = Modifier
                             .weight(1f)
@@ -100,6 +102,7 @@ fun PlaylistArtwork(
                     AlbumArt(
                         albumId = selected[1].second,
                         songId = selected[1].first,
+                        isVideo = isVideoTrackId(selected[1].first),
                         corner = 0.dp,
                         modifier = Modifier
                             .weight(1f)
@@ -114,6 +117,7 @@ fun PlaylistArtwork(
                     AlbumArt(
                         albumId = selected[2].second,
                         songId = selected[2].first,
+                        isVideo = isVideoTrackId(selected[2].first),
                         corner = 0.dp,
                         modifier = Modifier
                             .weight(1f)
@@ -122,6 +126,7 @@ fun PlaylistArtwork(
                     AlbumArt(
                         albumId = selected[3].second,
                         songId = selected[3].first,
+                        isVideo = isVideoTrackId(selected[3].first),
                         corner = 0.dp,
                         modifier = Modifier
                             .weight(1f)
@@ -134,6 +139,7 @@ fun PlaylistArtwork(
             AlbumArt(
                 albumId = selected[0].second,
                 songId = selected[0].first,
+                isVideo = isVideoTrackId(selected[0].first),
                 corner = corner,
                 modifier = modifier,
             )

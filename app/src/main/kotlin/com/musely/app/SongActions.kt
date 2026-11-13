@@ -16,6 +16,7 @@ data class SongFileInfo(
     val bitrateBps: Int?,
     val sampleRateHz: Int?,
     val dateModifiedSec: Long,
+    val hasAudioTrack: Boolean? = null,
 )
 
 sealed interface DeleteSongOutcome {
@@ -25,8 +26,8 @@ sealed interface DeleteSongOutcome {
 }
 
 /**
- * Loads file metadata for [song] from [MediaStore], falling back to [MediaMetadataRetriever]
- * for bitrate and sample rate when unavailable from MediaStore.
+ * Loads file metadata for [song] (audio or video) from [MediaStore], falling back to
+ * [MediaMetadataRetriever] for bitrate, sample rate, and audio-track availability.
  */
 fun loadSongFileInfo(context: Context, song: Song): SongFileInfo {
     var fileName = song.title
@@ -37,64 +38,65 @@ fun loadSongFileInfo(context: Context, song: Song): SongFileInfo {
     var bitrateBps: Int? = null
     var sampleRateHz: Int? = null
     var dateModifiedSec = 0L
+    var hasAudioTrack: Boolean? = null
 
     val projection = buildList {
-        add(MediaStore.Audio.Media.DISPLAY_NAME)
-        add(MediaStore.Audio.Media.SIZE)
-        add(MediaStore.Audio.Media.MIME_TYPE)
-        add(MediaStore.Audio.Media.DATE_MODIFIED)
-        add(MediaStore.Audio.Media.DURATION)
+        add(MediaStore.MediaColumns.DISPLAY_NAME)
+        add(MediaStore.MediaColumns.SIZE)
+        add(MediaStore.MediaColumns.MIME_TYPE)
+        add(MediaStore.MediaColumns.DATE_MODIFIED)
+        add(MediaStore.MediaColumns.DURATION)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            add(MediaStore.Audio.Media.RELATIVE_PATH)
+            add(MediaStore.MediaColumns.RELATIVE_PATH)
         } else {
             @Suppress("DEPRECATION")
-            add(MediaStore.Audio.Media.DATA)
+            add(MediaStore.MediaColumns.DATA)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            add(MediaStore.Audio.Media.BITRATE)
+            add(MediaStore.MediaColumns.BITRATE)
         }
     }.toTypedArray()
 
     runCatching {
         context.contentResolver.query(song.uri, projection, null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) {
-                val nameIdx = cursor.getColumnIndex(MediaStore.Audio.Media.DISPLAY_NAME)
+                val nameIdx = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
                 if (nameIdx >= 0) {
                     cursor.getString(nameIdx)?.takeIf { it.isNotBlank() }?.let { fileName = it }
                 }
 
-                val sizeIdx = cursor.getColumnIndex(MediaStore.Audio.Media.SIZE)
+                val sizeIdx = cursor.getColumnIndex(MediaStore.MediaColumns.SIZE)
                 if (sizeIdx >= 0) {
                     sizeBytes = cursor.getLong(sizeIdx).coerceAtLeast(0L)
                 }
 
-                val mimeIdx = cursor.getColumnIndex(MediaStore.Audio.Media.MIME_TYPE)
+                val mimeIdx = cursor.getColumnIndex(MediaStore.MediaColumns.MIME_TYPE)
                 if (mimeIdx >= 0) {
                     mimeType = cursor.getString(mimeIdx).orEmpty()
                 }
 
-                val modifiedIdx = cursor.getColumnIndex(MediaStore.Audio.Media.DATE_MODIFIED)
+                val modifiedIdx = cursor.getColumnIndex(MediaStore.MediaColumns.DATE_MODIFIED)
                 if (modifiedIdx >= 0) {
                     dateModifiedSec = cursor.getLong(modifiedIdx).coerceAtLeast(0L)
                 }
 
-                val durationIdx = cursor.getColumnIndex(MediaStore.Audio.Media.DURATION)
+                val durationIdx = cursor.getColumnIndex(MediaStore.MediaColumns.DURATION)
                 if (durationIdx >= 0) {
                     val queriedDuration = cursor.getLong(durationIdx)
                     if (queriedDuration > 0L) durationMs = queriedDuration
                 }
 
                 pathOrRelative = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    val relIdx = cursor.getColumnIndex(MediaStore.Audio.Media.RELATIVE_PATH)
+                    val relIdx = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
                     if (relIdx >= 0) cursor.getString(relIdx).orEmpty() else ""
                 } else {
                     @Suppress("DEPRECATION")
-                    val dataIdx = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
+                    val dataIdx = cursor.getColumnIndex(MediaStore.MediaColumns.DATA)
                     if (dataIdx >= 0) cursor.getString(dataIdx).orEmpty() else ""
                 }
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    val bitrateIdx = cursor.getColumnIndex(MediaStore.Audio.Media.BITRATE)
+                    val bitrateIdx = cursor.getColumnIndex(MediaStore.MediaColumns.BITRATE)
                     if (bitrateIdx >= 0) {
                         val queriedBitrate = cursor.getInt(bitrateIdx)
                         if (queriedBitrate > 0) bitrateBps = queriedBitrate
@@ -104,7 +106,7 @@ fun loadSongFileInfo(context: Context, song: Song): SongFileInfo {
         }
     }
 
-    if (bitrateBps == null || sampleRateHz == null || mimeType.isBlank() || durationMs <= 0L) {
+    if (song.isVideo || bitrateBps == null || sampleRateHz == null || mimeType.isBlank() || durationMs <= 0L) {
         val retriever = MediaMetadataRetriever()
         try {
             val ready = try {
@@ -121,6 +123,11 @@ fun loadSongFileInfo(context: Context, song: Song): SongFileInfo {
                 }
             }
             if (ready) {
+                if (song.isVideo) {
+                    hasAudioTrack = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO)
+                        ?.equals("yes", ignoreCase = true)
+                        ?: false
+                }
                 if (bitrateBps == null) {
                     bitrateBps = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)
                         ?.toIntOrNull()
@@ -158,6 +165,7 @@ fun loadSongFileInfo(context: Context, song: Song): SongFileInfo {
         bitrateBps = bitrateBps,
         sampleRateHz = sampleRateHz,
         dateModifiedSec = dateModifiedSec,
+        hasAudioTrack = hasAudioTrack,
     )
 }
 
@@ -166,6 +174,7 @@ fun loadSongFileInfo(context: Context, song: Song): SongFileInfo {
  * API 29 [RecoverableSecurityException], and direct deletion on API 26-28.
  */
 fun deleteSongFromDevice(context: Context, song: Song): DeleteSongOutcome {
+    val noun = if (song.isVideo) "video" else "song"
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         try {
             val pendingIntent = MediaStore.createDeleteRequest(
@@ -174,7 +183,7 @@ fun deleteSongFromDevice(context: Context, song: Song): DeleteSongOutcome {
             )
             DeleteSongOutcome.RequiresConfirmation(pendingIntent.intentSender)
         } catch (t: Throwable) {
-            DeleteSongOutcome.Failed(t.message ?: "Unable to request song deletion")
+            DeleteSongOutcome.Failed(t.message ?: "Unable to request $noun deletion")
         }
     } else if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
         try {
@@ -182,12 +191,12 @@ fun deleteSongFromDevice(context: Context, song: Song): DeleteSongOutcome {
             if (deletedRows > 0) {
                 DeleteSongOutcome.Deleted
             } else {
-                DeleteSongOutcome.Failed("Song could not be deleted")
+                DeleteSongOutcome.Failed("${noun.replaceFirstChar { it.uppercase() }} could not be deleted")
             }
         } catch (rse: RecoverableSecurityException) {
             DeleteSongOutcome.RequiresConfirmation(rse.userAction.actionIntent.intentSender)
         } catch (t: Throwable) {
-            DeleteSongOutcome.Failed(t.message ?: "Unable to delete song")
+            DeleteSongOutcome.Failed(t.message ?: "Unable to delete $noun")
         }
     } else {
         try {
@@ -195,10 +204,10 @@ fun deleteSongFromDevice(context: Context, song: Song): DeleteSongOutcome {
             if (deletedRows > 0) {
                 DeleteSongOutcome.Deleted
             } else {
-                DeleteSongOutcome.Failed("Song could not be deleted")
+                DeleteSongOutcome.Failed("${noun.replaceFirstChar { it.uppercase() }} could not be deleted")
             }
         } catch (t: Throwable) {
-            DeleteSongOutcome.Failed(t.message ?: "Unable to delete song")
+            DeleteSongOutcome.Failed(t.message ?: "Unable to delete $noun")
         }
     }
 }

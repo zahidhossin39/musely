@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-11-13
+
+### Added
+- **Videos** tab and direct video-as-audio playback via `MediaStore.Video.Media` (`loadVideos`, `videoTrackId`, `trackUri`) streamed through the audio-only `ExoPlayer` service without copying or extracting audio files
+- Playlist, **Liked Music** starring, multi-word search, hide/unhide, and device deletion support for video tracks, with `All` / `Songs` / `Videos` filter chips in `AddSongsPickerSheet`
+- Collision-free `"trackKeys"` (`"a:<id>"` / `"v:<mediaId>"`) JSON serialization alongside backward-compatible `"songIds"` and permission-aware pruning in `PlaylistStore`
+- Video thumbnail/frame artwork extraction in `ArtCache` (`loadForVideo`, `loadVideoFrame`), `PlaylistArtwork`, `MiniPlayer`, `NowPlayingScreen`, and notifications (`CoverBitmapLoader`)
+- Video audio-track inspection (`METADATA_KEY_HAS_AUDIO`) in `FileInfoSheet`, silent/unsupported audio track warnings (`MainViewModel.PlaybackMessages`), and `STATE_ENDED` / `STATE_IDLE` play recovery
+- Android 13+ `READ_MEDIA_VIDEO` and Android 14+ `READ_MEDIA_VISUAL_USER_SELECTED` permission onboarding and `"Select more"` refresh flow
+- Unit tests for video indexing/search, key encoding/pruning, video collage pairs, format helpers, and playback error/warning logic (`LibraryTest`, `PlaylistStoreTest`, `PlaylistLogicTest`, `DetailTest`, `FormatTest`, `VideoAudioReviewTest`)
+
+### Changed
+- Positioned `SnackbarHost` in the top overlay layer of `MuselyApp` so warnings and action feedback appear above `NowPlayingScreen` as well as library screens
+- Fixed Android 10 (`RecoverableSecurityException`) deletion retry in `PlaylistSheets` so external media is actually deleted after confirmation
+- Ignored `MediaStore.UNKNOWN_STRING` placeholders in `resolveVideoTitle` and used `ic_video` across empty/hidden video states
+- Bumped default `versionCode` to `5` and `versionName` to `3.0.0` in `app/build.gradle.kts`
+
 ## [2.0.0] - 2026-11-13
 
 ### Added
@@ -53,7 +70,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial Android project skeleton (originally named Waveloop, `com.waveloop.player`) with Jetpack Compose UI, MediaStore library loading, in-memory search, and background Media3 `PlaybackService`
 - MIT `LICENSE` and initial GitHub Actions build workflow
 
-[Unreleased]: https://github.com/zahidhossin39/musely/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/zahidhossin39/musely/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/zahidhossin39/musely/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/zahidhossin39/musely/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/zahidhossin39/musely/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/zahidhossin39/musely/compare/0361685...v0.2.0

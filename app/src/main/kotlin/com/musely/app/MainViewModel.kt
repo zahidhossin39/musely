@@ -13,14 +13,18 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -100,6 +104,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _allSongs = MutableStateFlow<List<Song>>(emptyList())
     val allSongs: StateFlow<List<Song>> = _allSongs
 
+    private val _allVideos = MutableStateFlow<List<Song>>(emptyList())
+    val allVideos: StateFlow<List<Song>> = _allVideos
+
     val hiddenIds: StateFlow<Set<Long>> = _userState
         .map { it.hiddenSongIds }
         .stateIn(viewModelScope, SharingStarted.Eagerly, _userState.value.hiddenSongIds)
@@ -109,8 +116,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }.flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val hiddenSongs: StateFlow<List<Song>> = combine(_allSongs, hiddenIds) { all, hidden ->
-        if (hidden.isEmpty()) emptyList() else all.filter { it.id in hidden }
+    val videos: StateFlow<List<Song>> = combine(_allVideos, hiddenIds) { all, hidden ->
+        if (hidden.isEmpty()) all else all.filterNot { it.id in hidden }
+    }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val allVisibleTracks: StateFlow<List<Song>> = combine(songs, videos) { s, v -> s + v }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val hiddenSongs: StateFlow<List<Song>> = combine(_allSongs, _allVideos, hiddenIds) { s, v, hidden ->
+        if (hidden.isEmpty()) emptyList() else (s + v).filter { it.id in hidden }
     }.flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -128,7 +144,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     val query = MutableStateFlow("")
 
-    val results: StateFlow<List<Song>> = combine(songs, query) { s, q -> s.search(q) }
+    val results: StateFlow<List<Song>> = combine(allVisibleTracks, query) { tracks, q -> tracks.search(q) }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -143,6 +159,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _playback = MutableStateFlow(PlaybackState())
     val playback: StateFlow<PlaybackState> = _playback
 
+    private val _playbackMessages = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val playbackMessages: SharedFlow<String> = _playbackMessages
+
     val installedVersion: String = getAppVersion(app)
     private val _updateStatus = MutableStateFlow<UpdateStatus>(UpdateStatus.Idle)
     val updateStatus: StateFlow<UpdateStatus> = _updateStatus
@@ -154,12 +173,71 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private var controller: MediaController? = null
     private val controllerFuture: ListenableFuture<MediaController>
     private var loadJob: Job? = null
+    private var lastWarnedMediaId: String? = null
+
+    internal object PlaybackMessages {
+        fun videoTrackAudioWarning(
+            song: Song?,
+            hasGroups: Boolean,
+            hasAudioGroup: Boolean,
+            hasSupportedAudio: Boolean,
+        ): String? {
+            if (song == null || !song.isVideo || !hasGroups) return null
+            return when {
+                !hasAudioGroup -> "\"${song.title}\" has no audio track"
+                !hasSupportedAudio -> "Audio format in \"${song.title}\" is not supported"
+                else -> null
+            }
+        }
+
+        fun playbackErrorMessage(song: Song?): String = when {
+            song == null -> "Unable to play this track"
+            song.isVideo -> "Unable to play audio from \"${song.title}\""
+            else -> "Unable to play \"${song.title}\""
+        }
+    }
 
     private val playerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = syncPlayback()
+
+        override fun onMediaItemTransition(
+            mediaItem: androidx.media3.common.MediaItem?,
+            reason: Int,
+        ) {
+            if (mediaItem?.mediaId != lastWarnedMediaId) {
+                lastWarnedMediaId = null
+            }
+            syncPlayback()
+        }
+
+        override fun onTracksChanged(tracks: Tracks) {
+            val c = controller ?: return
+            val currentItem = c.currentMediaItem ?: return
+            if (currentItem.mediaId != lastWarnedMediaId) {
+                lastWarnedMediaId = null
+            }
+            val song = songFor(currentItem) ?: return
+            val audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+            val message = PlaybackMessages.videoTrackAudioWarning(
+                song = song,
+                hasGroups = tracks.groups.isNotEmpty(),
+                hasAudioGroup = audioGroups.isNotEmpty(),
+                hasSupportedAudio = audioGroups.any { it.isSupported },
+            )
+            if (message != null && lastWarnedMediaId != currentItem.mediaId) {
+                lastWarnedMediaId = currentItem.mediaId
+                _playbackMessages.tryEmit(message)
+            }
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            val song = controller?.currentMediaItem?.let(::songFor)
+            _playbackMessages.tryEmit(PlaybackMessages.playbackErrorMessage(song))
+            syncPlayback()
+        }
     }
 
-    /** Rescans when files are added or removed while the app is open. */
+    /** Rescans when audio or video files are added or removed while the app is open. */
     private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) = loadLibrary(debounceMs = 800)
     }
@@ -175,6 +253,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         app.contentResolver.registerContentObserver(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, observer,
         )
+        app.contentResolver.registerContentObserver(
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI, true, observer,
+        )
         checkForUpdatesOnStartup()
     }
 
@@ -183,14 +264,35 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         loadJob = viewModelScope.launch {
             delay(debounceMs)
             ArtCache.clearMissing()
-            val list = withContext(Dispatchers.IO) {
-                runCatching { loadSongs(getApplication()) }.getOrDefault(emptyList())
+            val app = getApplication<Application>()
+            val canReadAudio = hasAudioAccess(app)
+            val canReadVideos = hasVideoAccess(app)
+            val canPruneVideos = hasFullVideoAccess(app)
+
+            val audioResult = withContext(Dispatchers.IO) {
+                if (canReadAudio) runCatching { loadSongs(app) } else Result.failure(SecurityException())
             }
+            val videoResult = withContext(Dispatchers.IO) {
+                if (canReadVideos) runCatching { loadVideos(app) } else Result.failure(SecurityException())
+            }
+
+            val audioList = audioResult.getOrDefault(emptyList())
+            val videoList = videoResult.getOrDefault(emptyList())
+            val existingIds = buildSet(audioList.size + videoList.size) {
+                audioList.forEach { add(it.id) }
+                videoList.forEach { add(it.id) }
+            }
+
             withContext(Dispatchers.IO) {
-                store.pruneSongs(list.map { it.id }.toSet())
+                store.pruneSongs(
+                    existingSongIds = existingIds,
+                    pruneAudio = canReadAudio && audioResult.isSuccess,
+                    pruneVideos = canPruneVideos && videoResult.isSuccess,
+                )
             }
-            songsById = list.associateBy { it.id }
-            _allSongs.value = list
+            songsById = (audioList + videoList).associateBy { it.id }
+            _allSongs.value = audioList
+            _allVideos.value = videoList
             refreshUserState()
             _loaded.value = true
             syncPlayback()
@@ -288,9 +390,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun onSongDeleted(songId: Long) {
         store.removeDeletedSong(songId)
         refreshUserState()
-        val remaining = _allSongs.value.filterNot { it.id == songId }
-        songsById = remaining.associateBy { it.id }
-        _allSongs.value = remaining
+        val remainingSongs = _allSongs.value.filterNot { it.id == songId }
+        val remainingVideos = _allVideos.value.filterNot { it.id == songId }
+        songsById = (remainingSongs + remainingVideos).associateBy { it.id }
+        _allSongs.value = remainingSongs
+        _allVideos.value = remainingVideos
         removeSongFromQueue(songId)
         loadLibrary()
     }
@@ -363,7 +467,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Replaces the queue with [queue] and starts playing at [index]. */
     fun play(queue: List<Song>, index: Int) {
+        if (queue.isEmpty() || index !in queue.indices) return
         val c = controller ?: return
+        lastWarnedMediaId = null
         c.setMediaItems(queue.map { it.toMediaItem() }, index, 0L)
         c.prepare()
         c.play()
@@ -385,7 +491,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun togglePlay() {
         val c = controller ?: return
-        if (c.isPlaying) c.pause() else c.play()
+        if (c.isPlaying) {
+            c.pause()
+        } else {
+            when (c.playbackState) {
+                Player.STATE_ENDED -> {
+                    lastWarnedMediaId = null
+                    c.seekTo(0)
+                    c.play()
+                }
+                Player.STATE_IDLE -> if (c.mediaItemCount > 0) {
+                    lastWarnedMediaId = null
+                    c.prepare()
+                    c.play()
+                }
+                else -> c.play()
+            }
+        }
     }
 
     fun next() { controller?.seekToNextMediaItem() }

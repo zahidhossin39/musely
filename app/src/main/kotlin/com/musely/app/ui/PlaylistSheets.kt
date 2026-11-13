@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -29,6 +32,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,6 +59,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -66,6 +72,7 @@ import com.musely.app.PlaylistStore
 import com.musely.app.R
 import com.musely.app.Song
 import com.musely.app.SongFileInfo
+import com.musely.app.search
 import com.musely.app.ui.theme.LocalSpotlight
 import kotlinx.coroutines.launch
 
@@ -88,8 +95,10 @@ fun rememberSongActionsUi(
     val scope = rememberCoroutineScope()
     val playlists by vm.playlists.collectAsStateWithLifecycle()
     val starredIds by vm.starredIds.collectAsStateWithLifecycle()
-    val allSongs by vm.allSongs.collectAsStateWithLifecycle()
-    val songsById = remember(allSongs) { allSongs.associateBy { it.id } }
+    val visibleTracks by vm.allVisibleTracks.collectAsStateWithLifecycle()
+    val songsById = remember(visibleTracks) {
+        visibleTracks.associateBy { it.id }
+    }
 
     var menuTarget by remember { mutableStateOf<Pair<Song, String?>?>(null) }
     var addToPlaylistSong by remember { mutableStateOf<Song?>(null) }
@@ -104,8 +113,24 @@ fun rememberSongActionsUi(
         val song = activeIntentSong
         activeIntentSong = null
         if (result.resultCode == Activity.RESULT_OK && song != null) {
-            vm.onSongDeleted(song.id)
-            onMessage("Deleted \"${song.title}\"", null, null)
+            if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
+                scope.launch {
+                    when (val outcome = vm.requestDeleteSong(song)) {
+                        DeleteSongOutcome.Deleted -> {
+                            onMessage("Deleted \"${song.title}\"", null, null)
+                        }
+                        is DeleteSongOutcome.RequiresConfirmation -> {
+                            onMessage("Could not delete \"${song.title}\"", null, null)
+                        }
+                        is DeleteSongOutcome.Failed -> {
+                            onMessage(outcome.message, null, null)
+                        }
+                    }
+                }
+            } else {
+                vm.onSongDeleted(song.id)
+                onMessage("Deleted \"${song.title}\"", null, null)
+            }
         }
     }
 
@@ -137,7 +162,11 @@ fun rememberSongActionsUi(
             if (granted) {
                 confirmDeleteSong = song
             } else {
-                onMessage("Storage permission is required to delete songs", null, null)
+                onMessage(
+                    "Storage permission is required to delete ${if (song.isVideo) "videos" else "songs"}",
+                    null,
+                    null,
+                )
             }
         }
     }
@@ -259,6 +288,7 @@ fun rememberSongActionsUi(
     confirmDeleteSong?.let { song ->
         ConfirmDeleteSongDialog(
             songTitle = song.title,
+            isVideo = song.isVideo,
             onDismiss = { confirmDeleteSong = null },
             onConfirm = {
                 confirmDeleteSong = null
@@ -304,7 +334,13 @@ private fun SongActionSheet(
                     .padding(horizontal = 24.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                AlbumArt(song.albumId, Modifier.size(48.dp), songId = song.id, corner = 12.dp)
+                AlbumArt(
+                    song.albumId,
+                    Modifier.size(48.dp),
+                    songId = song.id,
+                    isVideo = song.isVideo,
+                    corner = 12.dp,
+                )
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
@@ -313,12 +349,10 @@ private fun SongActionSheet(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        song.artist,
+                    TrackSubtitleRow(
+                        song = song,
                         style = MaterialTheme.typography.bodyMedium,
                         color = colors.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -517,7 +551,7 @@ private fun AddToPlaylistSheet(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                songCount(resolvedSongs.size),
+                                collectionSummary(resolvedSongs),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = colors.onSurfaceVariant,
                             )
@@ -595,6 +629,15 @@ private fun FileInfoSheet(
                     ) {
                         FileInfoRow("File name", loaded.fileName)
                         FileInfoRow("Folder / Path", loaded.pathOrRelative.ifBlank { "Internal storage" })
+                        if (song.isVideo) {
+                            FileInfoRow("Source", "Video file (audio-only playback)")
+                            val audioTrackLabel = when (loaded.hasAudioTrack) {
+                                true -> "Detected"
+                                false -> "None detected"
+                                null -> "Unknown"
+                            }
+                            FileInfoRow("Audio track", audioTrackLabel)
+                        }
                         FileInfoRow("Format", loaded.mimeType.ifBlank { "Unknown" })
                         FileInfoRow("Size", formatFileSize(loaded.sizeBytes))
                         FileInfoRow("Duration", formatTime(loaded.durationMs))
@@ -634,12 +677,13 @@ private fun FileInfoRow(label: String, value: String) {
 @Composable
 private fun ConfirmDeleteSongDialog(
     songTitle: String,
+    isVideo: Boolean,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Delete song?") },
+        title = { Text(if (isVideo) "Delete video?" else "Delete song?") },
         text = { Text("“$songTitle” will be permanently deleted from your device.") },
         confirmButton = {
             TextButton(onClick = onConfirm) {
@@ -702,7 +746,7 @@ fun ConfirmDeletePlaylistDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Delete playlist?") },
-        text = { Text("Delete “$playlistName”? The songs on your device won't be removed.") },
+        text = { Text("Delete “$playlistName”? The media files on your device won't be removed.") },
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text("Delete", color = MaterialTheme.colorScheme.error)
@@ -714,6 +758,12 @@ fun ConfirmDeletePlaylistDialog(
             }
         },
     )
+}
+
+private enum class PickerFilter(val label: String) {
+    All("All"),
+    Songs("Songs"),
+    Videos("Videos"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -728,11 +778,21 @@ fun AddSongsPickerSheet(
     val colors = MaterialTheme.colorScheme
     val spotlight = LocalSpotlight.current
     var query by remember { mutableStateOf("") }
+    var filter by remember { mutableStateOf(PickerFilter.All) }
     var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
 
-    val filtered = remember(availableSongs, query) {
-        val q = query.trim().lowercase()
-        if (q.isEmpty()) availableSongs else availableSongs.filter { q in it.searchKey }
+    val hasSongs = remember(availableSongs) { availableSongs.any { !it.isVideo } }
+    val hasVideos = remember(availableSongs) { availableSongs.any { it.isVideo } }
+    val showFilterChips = hasSongs && hasVideos
+
+    val effectiveFilter = if (showFilterChips) filter else PickerFilter.All
+    val filtered = remember(availableSongs, query, effectiveFilter) {
+        val typeFiltered = when (effectiveFilter) {
+            PickerFilter.All -> availableSongs
+            PickerFilter.Songs -> availableSongs.filter { !it.isVideo }
+            PickerFilter.Videos -> availableSongs.filter { it.isVideo }
+        }
+        typeFiltered.search(query)
     }
 
     ModalBottomSheet(
@@ -753,7 +813,7 @@ fun AddSongsPickerSheet(
             Spacer(Modifier.height(12.dp))
             if (availableSongs.isEmpty()) {
                 Text(
-                    text = "All library songs are already in this playlist.",
+                    text = "All available tracks are already in this playlist.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 24.dp),
@@ -762,12 +822,38 @@ fun AddSongsPickerSheet(
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
-                    placeholder = { Text("Filter songs") },
+                    placeholder = { Text(if (hasVideos) "Filter songs or videos" else "Filter songs") },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp),
                 )
+                if (showFilterChips) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        PickerFilter.entries.forEach { option ->
+                            FilterChip(
+                                selected = option == filter,
+                                onClick = { filter = option },
+                                label = { Text(option.label) },
+                                shape = CircleShape,
+                                border = null,
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = colors.surfaceContainerHigh,
+                                    labelColor = colors.onSurfaceVariant,
+                                    selectedContainerColor = colors.primary,
+                                    selectedLabelColor = colors.onPrimary,
+                                ),
+                            )
+                        }
+                    }
+                }
                 Spacer(Modifier.height(8.dp))
                 LazyColumn(
                     modifier = Modifier
@@ -786,7 +872,13 @@ fun AddSongsPickerSheet(
                                 .padding(horizontal = 24.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            AlbumArt(song.albumId, Modifier.size(44.dp), songId = song.id, corner = 10.dp)
+                            AlbumArt(
+                                song.albumId,
+                                Modifier.size(44.dp),
+                                songId = song.id,
+                                isVideo = song.isVideo,
+                                corner = 10.dp,
+                            )
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(
@@ -795,12 +887,10 @@ fun AddSongsPickerSheet(
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
-                                Text(
-                                    song.artist,
+                                TrackSubtitleRow(
+                                    song = song,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = colors.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
                                 )
                             }
                             Checkbox(
@@ -825,7 +915,7 @@ fun AddSongsPickerSheet(
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp),
                 ) {
-                    Text(if (selectedIds.isEmpty()) "Add songs" else "Add (${selectedIds.size})")
+                    Text(if (selectedIds.isEmpty()) "Add tracks" else "Add (${selectedIds.size})")
                 }
             }
         }
@@ -860,7 +950,7 @@ fun HiddenSongsSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "Hidden songs",
+                    "Hidden tracks",
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.weight(1f),
                 )
@@ -873,7 +963,7 @@ fun HiddenSongsSheet(
             Spacer(Modifier.height(8.dp))
             if (hiddenSongs.isEmpty()) {
                 Text(
-                    "No hidden songs.",
+                    "No hidden songs or videos.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 24.dp),
@@ -891,7 +981,13 @@ fun HiddenSongsSheet(
                                 .padding(horizontal = 24.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            AlbumArt(song.albumId, Modifier.size(44.dp), songId = song.id, corner = 10.dp)
+                            AlbumArt(
+                                song.albumId,
+                                Modifier.size(44.dp),
+                                songId = song.id,
+                                isVideo = song.isVideo,
+                                corner = 10.dp,
+                            )
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(
@@ -900,12 +996,10 @@ fun HiddenSongsSheet(
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
-                                Text(
-                                    song.artist,
+                                TrackSubtitleRow(
+                                    song = song,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = colors.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
                                 )
                             }
                             OutlinedButton(
@@ -926,5 +1020,31 @@ fun HiddenSongsSheet(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TrackSubtitleRow(
+    song: Song,
+    style: TextStyle,
+    color: Color,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (song.isVideo) {
+            Icon(
+                painter = painterResource(R.drawable.ic_video),
+                contentDescription = "Video audio",
+                modifier = Modifier.size(12.dp),
+                tint = color,
+            )
+            Spacer(Modifier.width(4.dp))
+        }
+        Text(
+            text = song.artist,
+            style = style,
+            color = color,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
