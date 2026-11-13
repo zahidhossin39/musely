@@ -179,4 +179,4 @@ For persistent release signing in CI, configure these repository secrets:
 
 ## License
 
-Licensed under the [MIT License](LICENSE). Copyright © 2026 [zahidhossin39](https://github.com/zahidhossin39).
+Licensed under the [MIT License](LICENSE). Copyright © 2026 [zahidhossin39](https://github.com/zahidhossin39) & [Masum Khan](https://github.com/8Masum).
