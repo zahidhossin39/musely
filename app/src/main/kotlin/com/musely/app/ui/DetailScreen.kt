@@ -94,7 +94,7 @@ fun playlistDetail(playlist: Playlist, visibleSongsById: Map<Long, Song>): Libra
     val subtitle = if (resolved.isEmpty()) {
         if (playlist.isSystem) "Starred tracks" else "Empty playlist"
     } else {
-        "${songCount(resolved.size)} · ${formatTotal(resolved)}"
+        "${collectionSummary(resolved)} · ${formatTotal(resolved)}"
     }
     return LibraryDetail(
         kind = DetailKind.Playlist,
@@ -122,7 +122,7 @@ fun DetailScreen(
 ) {
     val playback by vm.playback.collectAsStateWithLifecycle()
     val starredIds by vm.starredIds.collectAsStateWithLifecycle()
-    val allVisibleSongs by vm.songs.collectAsStateWithLifecycle()
+    val allVisibleTracks by vm.allVisibleTracks.collectAsStateWithLifecycle()
 
     var showAddSongs by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
@@ -210,9 +210,9 @@ fun DetailScreen(
 
     if (showAddSongs && isCustomPlaylist) {
         val playlistId = detail.playlistId
-        val availableSongs = remember(allVisibleSongs, detail.songs) {
+        val availableSongs = remember(allVisibleTracks, detail.songs) {
             val existingIds = detail.songs.mapTo(HashSet()) { it.id }
-            allVisibleSongs.filter { it.id !in existingIds }
+            allVisibleTracks.filter { it.id !in existingIds }
         }
         AddSongsPickerSheet(
             playlistName = detail.title,
@@ -220,7 +220,10 @@ fun DetailScreen(
             onDismiss = { showAddSongs = false },
             onAddSelected = { selectedIds ->
                 if (selectedIds.isNotEmpty() && vm.addSongsToPlaylist(playlistId, selectedIds)) {
-                    onMessage("Added ${songCount(selectedIds.size)} to ${detail.title}", null, null)
+                    val addedSet = selectedIds.toHashSet()
+                    val added = availableSongs.filter { it.id in addedSet }
+                    val label = if (added.isNotEmpty()) collectionSummary(added) else trackCount(selectedIds.size)
+                    onMessage("Added $label to ${detail.title}", null, null)
                 }
                 showAddSongs = false
             },
@@ -367,7 +370,7 @@ private fun CustomPlaylistControls(
         ) {
             Icon(painterResource(R.drawable.ic_add), null, Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
-            Text("Add songs", maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("Add tracks", maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         OutlinedButton(
             onClick = onRename,
@@ -421,9 +424,9 @@ private fun EmptyPlaylistState(
         Spacer(Modifier.height(6.dp))
         Text(
             if (isSystem) {
-                "Tap the star on any song in your library or player to collect your favorites here."
+                "Tap the star on any song or video in your library or player to collect your favorites here."
             } else {
-                "Add songs from your library to play and reorder them here."
+                "Add songs or videos from your library to play and reorder them here."
             },
             style = MaterialTheme.typography.bodyMedium,
             color = colors.onSurfaceVariant,
@@ -440,7 +443,7 @@ private fun EmptyPlaylistState(
             ) {
                 Icon(painterResource(R.drawable.ic_add), null, Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Add songs")
+                Text("Add tracks")
             }
         }
     }

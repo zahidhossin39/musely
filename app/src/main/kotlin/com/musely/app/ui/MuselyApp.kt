@@ -1,9 +1,7 @@
 package com.musely.app.ui
 
 import android.Manifest
-import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -39,7 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -47,28 +44,73 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.musely.app.MainViewModel
+import com.musely.app.audioPermission
+import com.musely.app.hasAudioAccess
+import com.musely.app.hasPartialVideoAccess
+import com.musely.app.hasVideoAccess
 import kotlinx.coroutines.launch
 
-private val audioPermission =
-    if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO
-    else Manifest.permission.READ_EXTERNAL_STORAGE
-
-private fun hasAudioAccess(context: Context) =
-    ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED
+private val videoPermissions: Array<String> = when {
+    Build.VERSION.SDK_INT >= 34 -> arrayOf(
+        Manifest.permission.READ_MEDIA_VIDEO,
+        Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
+    )
+    Build.VERSION.SDK_INT >= 33 -> arrayOf(Manifest.permission.READ_MEDIA_VIDEO)
+    else -> arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+}
 
 @Composable
 fun MuselyApp(vm: MainViewModel = viewModel()) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val openAppSettings = remember(context) {
+        {
+            context.startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
+            )
+        }
+    }
+
     var granted by remember { mutableStateOf(hasAudioAccess(context)) }
     var declined by rememberSaveable { mutableStateOf(false) }
+    var videoGranted by remember { mutableStateOf(hasVideoAccess(context)) }
+    var partialVideoAccess by remember { mutableStateOf(hasPartialVideoAccess(context)) }
+    var videoDeclined by rememberSaveable { mutableStateOf(false) }
+
+    val refreshVideoAccess = {
+        val access = hasVideoAccess(context)
+        videoGranted = access
+        partialVideoAccess = hasPartialVideoAccess(context)
+        if (access) videoDeclined = false
+    }
+
     val request = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         granted = ok
         declined = !ok
+        if (ok) {
+            refreshVideoAccess()
+        }
     }
-    // Picks up access granted from system settings when the user comes back.
+    val requestVideo = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { _ ->
+        val access = hasVideoAccess(context)
+        videoGranted = access
+        partialVideoAccess = hasPartialVideoAccess(context)
+        videoDeclined = !access
+        if (access) {
+            vm.loadLibrary()
+        }
+    }
+
+    // Picks up access granted or modified from system settings when the user comes back.
     LifecycleResumeEffect(Unit) {
+        val prevAudio = granted
+        val prevVideo = videoGranted
+        val prevPartial = partialVideoAccess
         granted = hasAudioAccess(context)
+        refreshVideoAccess()
+        if (granted && (granted != prevAudio || videoGranted != prevVideo || partialVideoAccess != prevPartial)) {
+            vm.loadLibrary()
+        }
         onPauseOrDispose { }
     }
     DisposableEffect(lifecycleOwner, vm) {
@@ -83,27 +125,37 @@ fun MuselyApp(vm: MainViewModel = viewModel()) {
     LaunchedEffect(granted) { if (granted) vm.loadLibrary() }
 
     if (granted) {
-        Player(vm)
+        Player(
+            vm = vm,
+            hasVideoAccess = videoGranted,
+            hasPartialVideoAccess = partialVideoAccess,
+            videoDeclined = videoDeclined,
+            onRequestVideoAccess = { requestVideo.launch(videoPermissions) },
+            onOpenSettings = openAppSettings,
+        )
     } else {
         WelcomeScreen(
             declined = declined,
-            onAllow = { request.launch(audioPermission) },
-            onOpenSettings = {
-                context.startActivity(
-                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
-                )
-            },
+            onAllow = { request.launch(audioPermission()) },
+            onOpenSettings = openAppSettings,
         )
     }
 }
 
 /** Library, album/artist/playlist detail, the floating mini player and the full-screen player. */
 @Composable
-private fun Player(vm: MainViewModel) {
+private fun Player(
+    vm: MainViewModel,
+    hasVideoAccess: Boolean,
+    hasPartialVideoAccess: Boolean,
+    videoDeclined: Boolean,
+    onRequestVideoAccess: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
     val playback by vm.playback.collectAsStateWithLifecycle()
     val playlists by vm.playlists.collectAsStateWithLifecycle()
-    val songs by vm.songs.collectAsStateWithLifecycle()
-    val visibleSongsById = remember(songs) { songs.associateBy { it.id } }
+    val allVisibleTracks by vm.allVisibleTracks.collectAsStateWithLifecycle()
+    val visibleSongsById = remember(allVisibleTracks) { allVisibleTracks.associateBy { it.id } }
 
     var showPlayer by rememberSaveable { mutableStateOf(false) }
     var detail by remember { mutableStateOf<LibraryDetail?>(null) }
@@ -132,6 +184,12 @@ private fun Player(vm: MainViewModel) {
     }
 
     val songActions = rememberSongActionsUi(vm = vm, onMessage = showMessage)
+
+    LaunchedEffect(vm, showMessage) {
+        vm.playbackMessages.collect { message ->
+            showMessage(message, null, null)
+        }
+    }
 
     val currentDetail = detail
     val resolvedDetail = remember(currentDetail, playlists, visibleSongsById) {
@@ -172,6 +230,11 @@ private fun Player(vm: MainViewModel) {
                         gridState = gridState,
                         section = section,
                         onSectionChange = { section = it },
+                        hasVideoAccess = hasVideoAccess,
+                        hasPartialVideoAccess = hasPartialVideoAccess,
+                        videoDeclined = videoDeclined,
+                        onRequestVideoAccess = onRequestVideoAccess,
+                        onOpenSettings = onOpenSettings,
                         bottomInset = bottomInset,
                         songActions = songActions,
                         onOpenDetail = { detail = it },
@@ -189,12 +252,6 @@ private fun Player(vm: MainViewModel) {
                     )
                 }
             }
-            SnackbarHost(
-                hostState = snackbarHostState,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = if (hasSong && !showPlayer) MiniPlayerReserve else 12.dp),
-            )
             AnimatedVisibility(
                 visible = hasSong && !showPlayer,
                 modifier = Modifier.align(Alignment.BottomCenter),
@@ -215,5 +272,12 @@ private fun Player(vm: MainViewModel) {
                 onClose = { showPlayer = false },
             )
         }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .safeDrawingPadding()
+                .padding(bottom = if (hasSong && !showPlayer) MiniPlayerReserve else 12.dp),
+        )
     }
 }

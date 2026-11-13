@@ -85,7 +85,7 @@ fun NowPlayingScreen(vm: MainViewModel, songActions: SongActionsUi, onClose: () 
             Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            TopBar(song.album, onClose)
+            TopBar(song.album, song.isVideo, onClose)
             Box(Modifier.weight(1f).fillMaxWidth().padding(vertical = 20.dp), contentAlignment = Alignment.Center) {
                 AlbumArt(
                     song.albumId,
@@ -96,6 +96,7 @@ fun NowPlayingScreen(vm: MainViewModel, songActions: SongActionsUi, onClose: () 
                     songId = song.id,
                     large = true,
                     corner = 28.dp,
+                    isVideo = song.isVideo,
                 )
             }
             Row(
@@ -105,13 +106,24 @@ fun NowPlayingScreen(vm: MainViewModel, songActions: SongActionsUi, onClose: () 
                 Column(Modifier.weight(1f)) {
                     Text(song.title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Spacer(Modifier.height(2.dp))
-                    Text(
-                        song.artist,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = colors.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (song.isVideo) {
+                            Icon(
+                                painterResource(R.drawable.ic_video),
+                                contentDescription = "Video audio",
+                                modifier = Modifier.size(16.dp),
+                                tint = colors.primary,
+                            )
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        Text(
+                            song.artist,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = colors.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 Spacer(Modifier.width(4.dp))
                 IconButton(onClick = { songActions.toggleStar(song) }) {
@@ -148,12 +160,12 @@ fun NowPlayingScreen(vm: MainViewModel, songActions: SongActionsUi, onClose: () 
 }
 
 @Composable
-private fun TopBar(album: String, onClose: () -> Unit) {
+private fun TopBar(album: String, isVideo: Boolean, onClose: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onClose) { Icon(painterResource(R.drawable.ic_down), "Close player") }
         Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                "NOW PLAYING",
+                if (isVideo) "PLAYING VIDEO AUDIO" else "NOW PLAYING",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 letterSpacing = 2.sp,
@@ -275,7 +287,7 @@ private fun UpNext(next: Song?) {
                 )
                 return@Row
             }
-            AlbumArt(next.albumId, Modifier.size(40.dp), songId = next.id, corner = 10.dp)
+            AlbumArt(next.albumId, Modifier.size(40.dp), songId = next.id, corner = 10.dp, isVideo = next.isVideo)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(

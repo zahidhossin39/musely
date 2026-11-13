@@ -29,6 +29,17 @@ internal fun formatTotal(songs: List<Song>): String {
 
 internal fun songCount(count: Int) = if (count == 1) "1 song" else "$count songs"
 
+internal fun videoCount(count: Int) = if (count == 1) "1 video" else "$count videos"
+
+internal fun trackCount(count: Int) = if (count == 1) "1 track" else "$count tracks"
+
+internal fun collectionSummary(songs: List<Song>): String = when {
+    songs.isEmpty() -> songCount(0)
+    songs.all { it.isVideo } -> videoCount(songs.size)
+    songs.none { it.isVideo } -> songCount(songs.size)
+    else -> trackCount(songs.size)
+}
+
 internal fun albumCount(count: Int) = if (count == 1) "1 album" else "$count albums"
 
 internal fun greeting(hour: Int): String = when (hour) {

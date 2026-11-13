@@ -2,12 +2,14 @@ package com.musely.app.ui
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,6 +24,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
@@ -32,7 +36,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -46,6 +52,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -60,6 +67,7 @@ import java.time.LocalTime
 
 internal enum class Section(val label: String) {
     Songs("Songs"),
+    Videos("Videos"),
     Albums("Albums"),
     Artists("Artists"),
     Playlists("Playlists"),
@@ -72,6 +80,11 @@ internal fun LibraryScreen(
     gridState: LazyGridState,
     section: Section,
     onSectionChange: (Section) -> Unit,
+    hasVideoAccess: Boolean,
+    hasPartialVideoAccess: Boolean,
+    videoDeclined: Boolean,
+    onRequestVideoAccess: () -> Unit,
+    onOpenSettings: () -> Unit,
     bottomInset: Dp,
     songActions: SongActionsUi,
     onOpenDetail: (LibraryDetail) -> Unit,
@@ -80,6 +93,9 @@ internal fun LibraryScreen(
     val loaded by vm.loaded.collectAsStateWithLifecycle()
     val allSongs by vm.allSongs.collectAsStateWithLifecycle()
     val songs by vm.songs.collectAsStateWithLifecycle()
+    val allVideos by vm.allVideos.collectAsStateWithLifecycle()
+    val videos by vm.videos.collectAsStateWithLifecycle()
+    val allVisibleTracks by vm.allVisibleTracks.collectAsStateWithLifecycle()
     val results by vm.results.collectAsStateWithLifecycle()
     val albums by vm.albums.collectAsStateWithLifecycle()
     val artists by vm.artists.collectAsStateWithLifecycle()
@@ -89,7 +105,8 @@ internal fun LibraryScreen(
     val updateStatus by vm.updateStatus.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
     val hour = remember { LocalTime.now().hour }
-    val songsById = remember(songs) { songs.associateBy { it.id } }
+    val songsById = remember(allVisibleTracks) { allVisibleTracks.associateBy { it.id } }
+    val shuffleQueue = if (section == Section.Videos) videos else songs
 
     var showUpdateSheet by remember { mutableStateOf(false) }
     var showCreatePlaylist by remember { mutableStateOf(false) }
@@ -110,43 +127,102 @@ internal fun LibraryScreen(
                 onUpdateClick = { showUpdateSheet = true },
             )
         }
-        fullWidth("greeting") { Greeting(greeting(hour), subtitle(loaded, songs.size)) }
+        fullWidth("greeting") { Greeting(greeting(hour), subtitle(loaded, songs.size, videos.size)) }
         fullWidth("search") { SearchField(query, onChange = { vm.query.value = it }) }
         when {
             !loaded -> fullWidth("loading") { Loading() }
-            allSongs.isEmpty() -> fullWidth("empty") {
-                StateMessage(
-                    "It's quiet in here",
-                    "Add songs to your phone and Musely will pick them up automatically. No refresh needed.",
-                )
-            }
             query.isNotBlank() -> searchResults(query.trim(), results, playback, vm, starredIds, songActions)
             else -> {
                 fullWidth("sections") {
-                    SectionChips(section, onSelect = onSectionChange, onShuffle = { vm.shuffle(songs) })
+                    SectionChips(
+                        current = section,
+                        onSelect = onSectionChange,
+                        shuffleEnabled = shuffleQueue.isNotEmpty(),
+                        shuffleLabel = if (section == Section.Videos) "Shuffle all videos" else "Shuffle all songs",
+                        onShuffle = { vm.shuffle(shuffleQueue) },
+                    )
                 }
                 when (section) {
                     Section.Songs -> {
-                        if (songs.isEmpty()) {
-                            fullWidth("all-hidden") {
+                        when {
+                            allSongs.isEmpty() -> fullWidth("empty") {
+                                StateMessage(
+                                    "It's quiet in here",
+                                    "Add songs to your phone and Musely will pick them up automatically. No refresh needed.",
+                                )
+                            }
+                            songs.isEmpty() -> fullWidth("all-hidden") {
                                 StateMessage(
                                     "All songs are hidden",
                                     "Open Playlists → Hidden to unhide songs.",
                                 )
                             }
-                        } else {
-                            songRows(songs, playback, vm, starredIds, songActions)
+                            else -> songRows(songs, playback, vm, starredIds, songActions)
                         }
                     }
-                    Section.Albums -> items(albums, key = { "album-${it.id}" }) { album ->
-                        AlbumCard(album) { onOpenDetail(albumDetail(album, songs)) }
+                    Section.Videos -> {
+                        if (!hasVideoAccess) {
+                            fullWidth("video-permission") {
+                                VideoAccessCard(
+                                    declined = videoDeclined,
+                                    onAllow = onRequestVideoAccess,
+                                    onOpenSettings = onOpenSettings,
+                                )
+                            }
+                        } else {
+                            if (hasPartialVideoAccess) {
+                                fullWidth("video-partial-access") {
+                                    PartialVideoAccessBanner(onSelectMore = onRequestVideoAccess)
+                                }
+                            }
+                            when {
+                                allVideos.isEmpty() -> fullWidth("videos-empty") {
+                                    StateMessage(
+                                        title = "No videos found",
+                                        body = if (hasPartialVideoAccess) {
+                                            "Choose videos using \"Select more\" above and Musely will play their audio."
+                                        } else {
+                                            "Add videos to your phone and Musely will play their audio automatically."
+                                        },
+                                        iconRes = R.drawable.ic_video,
+                                    )
+                                }
+                                videos.isEmpty() -> fullWidth("videos-hidden") {
+                                    StateMessage(
+                                        title = "All videos are hidden",
+                                        body = "Open Playlists → Hidden to unhide videos.",
+                                        iconRes = R.drawable.ic_video,
+                                    )
+                                }
+                                else -> songRows(videos, playback, vm, starredIds, songActions)
+                            }
+                        }
                     }
-                    Section.Artists -> items(
-                        artists,
-                        key = { "artist-${it.name}" },
-                        span = { GridItemSpan(maxLineSpan) },
-                    ) { artist ->
-                        ArtistRow(artist.name, artist.songCount) { onOpenDetail(artistDetail(artist, songs)) }
+                    Section.Albums -> {
+                        if (albums.isEmpty()) {
+                            fullWidth("albums-empty") {
+                                StateMessage("No albums yet", "Albums from your songs will appear here.")
+                            }
+                        } else {
+                            items(albums, key = { "album-${it.id}" }) { album ->
+                                AlbumCard(album) { onOpenDetail(albumDetail(album, songs)) }
+                            }
+                        }
+                    }
+                    Section.Artists -> {
+                        if (artists.isEmpty()) {
+                            fullWidth("artists-empty") {
+                                StateMessage("No artists yet", "Artists from your songs will appear here.")
+                            }
+                        } else {
+                            items(
+                                artists,
+                                key = { "artist-${it.name}" },
+                                span = { GridItemSpan(maxLineSpan) },
+                            ) { artist ->
+                                ArtistRow(artist.name, artist.songCount) { onOpenDetail(artistDetail(artist, songs)) }
+                            }
+                        }
                     }
                     Section.Playlists -> {
                         fullWidth("playlist-actions") {
@@ -237,10 +313,12 @@ internal fun LibraryScreen(
     }
 }
 
-private fun subtitle(loaded: Boolean, count: Int) = when {
+private fun subtitle(loaded: Boolean, songTotal: Int, videoTotal: Int) = when {
     !loaded -> "Tuning up your library…"
-    count == 0 -> "Let's find your music."
-    else -> "${songCount(count)}, ready when you are."
+    songTotal == 0 && videoTotal == 0 -> "Let's find your music."
+    videoTotal == 0 -> "${songCount(songTotal)}, ready when you are."
+    songTotal == 0 -> "${videoCount(videoTotal)}, ready when you are."
+    else -> "${songCount(songTotal)} · ${videoCount(videoTotal)}"
 }
 
 private fun LazyGridScope.fullWidth(key: Any, content: @Composable () -> Unit) =
@@ -338,7 +416,7 @@ private fun SearchField(query: String, onChange: (String) -> Unit) {
         value = query,
         onValueChange = onChange,
         modifier = Modifier.fillMaxWidth().padding(horizontal = ItemInset),
-        placeholder = { Text("Songs, artists, albums") },
+        placeholder = { Text("Songs, videos, artists, albums") },
         leadingIcon = { Icon(painterResource(R.drawable.ic_search), null) },
         trailingIcon = {
             if (query.isNotEmpty()) {
@@ -361,7 +439,13 @@ private fun SearchField(query: String, onChange: (String) -> Unit) {
 }
 
 @Composable
-private fun SectionChips(current: Section, onSelect: (Section) -> Unit, onShuffle: () -> Unit) {
+private fun SectionChips(
+    current: Section,
+    onSelect: (Section) -> Unit,
+    shuffleEnabled: Boolean,
+    shuffleLabel: String,
+    onShuffle: () -> Unit,
+) {
     val colors = MaterialTheme.colorScheme
     val spotlight = LocalSpotlight.current
     Row(
@@ -394,12 +478,126 @@ private fun SectionChips(current: Section, onSelect: (Section) -> Unit, onShuffl
         Spacer(Modifier.width(8.dp))
         FilledIconButton(
             onClick = onShuffle,
+            enabled = shuffleEnabled,
             colors = IconButtonDefaults.filledIconButtonColors(
                 containerColor = spotlight.container,
                 contentColor = spotlight.content,
             ),
         ) {
-            Icon(painterResource(R.drawable.ic_shuffle), "Shuffle all songs")
+            Icon(painterResource(R.drawable.ic_shuffle), shuffleLabel)
+        }
+    }
+}
+
+@Composable
+private fun VideoAccessCard(
+    declined: Boolean,
+    onAllow: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    val spotlight = LocalSpotlight.current
+    Surface(
+        color = colors.surfaceContainerHigh,
+        shape = MaterialTheme.shapes.extraLarge,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = ItemInset, vertical = 12.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Surface(
+                color = colors.primaryContainer,
+                shape = CircleShape,
+                modifier = Modifier.size(56.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        painterResource(R.drawable.ic_video),
+                        contentDescription = null,
+                        tint = colors.onPrimaryContainer,
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = "Listen to videos as audio",
+                style = MaterialTheme.typography.titleLarge,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = if (declined) {
+                    "Allow video access so Musely can play audio directly from videos on your device without copying files."
+                } else {
+                    "Play any video's audio directly in Musely, star favorites to Liked Music, and add them to playlists — no file copying."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(20.dp))
+            Button(
+                onClick = onAllow,
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = spotlight.container,
+                    contentColor = spotlight.content,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (declined) "Try again" else "Allow video access")
+            }
+            if (declined) {
+                TextButton(
+                    onClick = onOpenSettings,
+                    modifier = Modifier.padding(top = 4.dp),
+                ) {
+                    Text("Open app settings")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PartialVideoAccessBanner(onSelectMore: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        color = colors.surfaceContainerHigh,
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = ItemInset, vertical = 6.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                painterResource(R.drawable.ic_video),
+                contentDescription = null,
+                tint = colors.primary,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Showing selected videos",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Text(
+                    "Grant more access anytime to include other videos.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = onSelectMore) {
+                Text("Select more")
+            }
         }
     }
 }

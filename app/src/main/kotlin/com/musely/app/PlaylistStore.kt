@@ -22,6 +22,27 @@ data class LibraryUserState(
 
 private const val STATE_JSON_VERSION = 1
 
+internal fun encodeTrackKey(trackId: Long): String =
+    if (isVideoTrackId(trackId)) "v:${mediaStoreIdFromTrackId(trackId)}" else "a:$trackId"
+
+internal fun decodeTrackKey(raw: String): Long? {
+    val trimmed = raw.trim()
+    return when {
+        trimmed.startsWith("a:") -> {
+            val id = trimmed.substring(2).toLongOrNull() ?: return null
+            if (id >= 0L) id else null
+        }
+        trimmed.startsWith("v:") -> {
+            val mediaId = trimmed.substring(2).toLongOrNull() ?: return null
+            if (mediaId >= 0L) videoTrackId(mediaId) else null
+        }
+        else -> {
+            val id = trimmed.toLongOrNull() ?: return null
+            if (id >= 0L) id else null
+        }
+    }
+}
+
 /**
  * Serializes [state] into a UTF-8 JSON string using standard `org.json` types.
  */
@@ -37,26 +58,43 @@ fun encodeStateJson(state: LibraryUserState): String {
         item.put("name", playlist.name)
         item.put("isSystem", false)
         item.put("createdAtMs", playlist.createdAtMs)
+        val distinctIds = playlist.songIds.distinct()
         val songIdsArray = JSONArray()
-        for (songId in playlist.songIds.distinct()) {
-            songIdsArray.put(songId)
+        val trackKeysArray = JSONArray()
+        for (songId in distinctIds) {
+            if (songId >= 0L) {
+                songIdsArray.put(songId)
+            }
+            trackKeysArray.put(encodeTrackKey(songId))
         }
         item.put("songIds", songIdsArray)
+        item.put("trackKeys", trackKeysArray)
         playlistsArray.put(item)
     }
     root.put("playlists", playlistsArray)
 
+    val distinctStarred = state.starredSongIds.distinct()
     val starredArray = JSONArray()
-    for (songId in state.starredSongIds.distinct()) {
-        starredArray.put(songId)
+    val starredKeysArray = JSONArray()
+    for (songId in distinctStarred) {
+        if (songId >= 0L) {
+            starredArray.put(songId)
+        }
+        starredKeysArray.put(encodeTrackKey(songId))
     }
     root.put("starredSongIds", starredArray)
+    root.put("starredTrackKeys", starredKeysArray)
 
     val hiddenArray = JSONArray()
+    val hiddenKeysArray = JSONArray()
     for (songId in state.hiddenSongIds) {
-        hiddenArray.put(songId)
+        if (songId >= 0L) {
+            hiddenArray.put(songId)
+        }
+        hiddenKeysArray.put(encodeTrackKey(songId))
     }
     root.put("hiddenSongIds", hiddenArray)
+    root.put("hiddenTrackKeys", hiddenKeysArray)
 
     return root.toString()
 }
@@ -70,8 +108,14 @@ fun decodeStateJson(raw: String): LibraryUserState {
     return try {
         val root = JSONObject(raw)
         val playlists = parsePlaylists(root.optJSONArray("playlists"))
-        val starredSongIds = parseLongList(root.optJSONArray("starredSongIds")).distinct()
-        val hiddenSongIds = parseLongList(root.optJSONArray("hiddenSongIds")).toSet()
+        val starredSongIds = (
+            root.optJSONArray("starredTrackKeys")?.let(::parseTrackKeyList)
+                ?: parseLongList(root.optJSONArray("starredSongIds"))
+            ).distinct()
+        val hiddenSongIds = (
+            root.optJSONArray("hiddenTrackKeys")?.let(::parseTrackKeyList)
+                ?: parseLongList(root.optJSONArray("hiddenSongIds"))
+            ).toSet()
         LibraryUserState(
             playlists = playlists,
             starredSongIds = starredSongIds,
@@ -96,7 +140,10 @@ private fun parsePlaylists(array: JSONArray?): List<Playlist> {
         }
         if (!seenIds.add(id)) continue
         val createdAtMs = obj.optLong("createdAtMs", 0L).coerceAtLeast(0L)
-        val songIds = parseLongList(obj.optJSONArray("songIds")).distinct()
+        val songIds = (
+            obj.optJSONArray("trackKeys")?.let(::parseTrackKeyList)
+                ?: parseLongList(obj.optJSONArray("songIds"))
+            ).distinct()
         result += Playlist(
             id = id,
             name = name,
@@ -104,6 +151,23 @@ private fun parsePlaylists(array: JSONArray?): List<Playlist> {
             isSystem = false,
             createdAtMs = createdAtMs,
         )
+    }
+    return result
+}
+
+private fun parseTrackKeyList(array: JSONArray?): List<Long> {
+    if (array == null) return emptyList()
+    val result = ArrayList<Long>(array.length())
+    for (i in 0 until array.length()) {
+        val value = array.opt(i)
+        val id = when (value) {
+            is String -> decodeTrackKey(value)
+            is Number -> value.toLong().takeIf { it >= 0L }
+            else -> null
+        }
+        if (id != null) {
+            result += id
+        }
     }
     return result
 }
@@ -354,12 +418,20 @@ class PlaylistStore private constructor(
         saveLocked(current.copy(hiddenSongIds = emptySet()))
     }
 
-    fun pruneSongs(existingSongIds: Set<Long>): Boolean = synchronized(lock) {
+    fun pruneSongs(
+        existingSongIds: Set<Long>,
+        pruneAudio: Boolean = true,
+        pruneVideos: Boolean = true,
+    ): Boolean = synchronized(lock) {
         val current = loadLocked()
-        val newStarred = current.starredSongIds.filter { it in existingSongIds }
-        val newHidden = current.hiddenSongIds.filter { it in existingSongIds }.toSet()
+        fun shouldKeep(id: Long): Boolean =
+            if (isVideoTrackId(id)) (!pruneVideos || id in existingSongIds)
+            else (!pruneAudio || id in existingSongIds)
+
+        val newStarred = current.starredSongIds.filter(::shouldKeep)
+        val newHidden = current.hiddenSongIds.filter(::shouldKeep).toSet()
         val newPlaylists = current.playlists.map { playlist ->
-            val filtered = playlist.songIds.filter { it in existingSongIds }
+            val filtered = playlist.songIds.filter(::shouldKeep)
             if (filtered.size == playlist.songIds.size) playlist else playlist.copy(songIds = filtered)
         }
         val next = LibraryUserState(

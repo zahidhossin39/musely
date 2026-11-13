@@ -106,7 +106,13 @@ internal fun SongRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (showArt) {
-            AlbumArt(song.albumId, Modifier.size(52.dp), songId = song.id, corner = 14.dp)
+            AlbumArt(
+                song.albumId,
+                Modifier.size(52.dp),
+                songId = song.id,
+                corner = 14.dp,
+                isVideo = song.isVideo,
+            )
             Spacer(Modifier.width(16.dp))
         }
         Column(Modifier.weight(1f)) {
@@ -117,13 +123,24 @@ internal fun SongRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                song.artist,
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (song.isVideo) {
+                    Icon(
+                        painterResource(R.drawable.ic_video),
+                        contentDescription = "Video audio",
+                        modifier = Modifier.size(14.dp),
+                        tint = colors.primary,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                }
+                Text(
+                    song.artist,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         Spacer(Modifier.width(8.dp))
         if (isCurrent) {
@@ -261,9 +278,9 @@ internal fun PlaylistCard(
         )
         Text(
             text = if (songs.isEmpty()) {
-                if (playlist.isSystem) "Star songs to collect here" else "Empty playlist"
+                if (playlist.isSystem) "Star songs or videos to collect here" else "Empty playlist"
             } else {
-                "${songCount(songs.size)} · ${formatTotal(songs)}"
+                "${collectionSummary(songs)} · ${formatTotal(songs)}"
             },
             style = MaterialTheme.typography.bodySmall,
             color = colors.onSurfaceVariant,
@@ -366,7 +383,12 @@ private fun bounce(durationMs: Int) =
 
 /** Friendly full-width message for empty, loading-free states. */
 @Composable
-internal fun StateMessage(title: String, body: String, modifier: Modifier = Modifier) {
+internal fun StateMessage(
+    title: String,
+    body: String,
+    modifier: Modifier = Modifier,
+    iconRes: Int = R.drawable.ic_note,
+) {
     Column(
         modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 56.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -376,7 +398,7 @@ internal fun StateMessage(title: String, body: String, modifier: Modifier = Modi
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                painterResource(R.drawable.ic_note), null,
+                painterResource(iconRes), null,
                 Modifier.size(36.dp),
                 tint = MaterialTheme.colorScheme.primary,
             )
