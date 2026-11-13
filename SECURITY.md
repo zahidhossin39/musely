@@ -6,14 +6,14 @@ Security updates are provided for the latest release line:
 
 | Version | Supported |
 | :--- | :--- |
-| `2.0.x` | :white_check_mark: Supported |
-| `< 2.0.0` | :x: Unsupported |
+| `3.0.x` | :white_check_mark: Supported |
+| `< 3.0.0` | :x: Unsupported |
 
 ## Privacy & Threat Model
 
 Musely is designed as an **offline-first** Android audio player:
 
-- Audio library scanning, artwork loading, playlists, and playback operate strictly on-device using local `MediaStore` and embedded audio file data.
+- Audio and video library scanning, artwork/frame loading, playlists, and playback operate strictly on-device using local `MediaStore` and embedded media metadata (playing video audio streams directly without copying files).
 - The `INTERNET` permission in [`AndroidManifest.xml`](app/src/main/AndroidManifest.xml) is scoped solely to read-only update checks against `zahidhossin39/musely` GitHub Releases (and opening the release `.apk` URL in your system browser via `Intent.ACTION_VIEW`—no `REQUEST_INSTALL_PACKAGES` or in-app downloader is used).
 - No background telemetry, crash reporting SDKs, ads, or accounts are included.
 

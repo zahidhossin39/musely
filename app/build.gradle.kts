@@ -15,8 +15,8 @@ android {
         applicationId = "com.musely.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 4
-        versionName = (project.findProperty("versionName") as String?) ?: "2.0.0"
+        versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 5
+        versionName = (project.findProperty("versionName") as String?) ?: "3.0.0"
     }
 
     androidResources {

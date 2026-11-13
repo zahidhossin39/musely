@@ -33,20 +33,21 @@
 
 ---
 
-Musely turns the audio files already stored on your device into a fast, distraction-free library—no accounts, no ads, no analytics, and nothing leaves your phone.
+Musely turns the audio and video files already stored on your device into a fast, distraction-free listening library—playing video audio streams directly without copying files, with no accounts, no ads, no analytics, and nothing leaving your phone.
 
 ## Features
 
-- **Organized local library**: Scans device audio via Android `MediaStore` and observes changes automatically (`ContentObserver`), so newly added tracks appear without manual refreshes.
-- **Browse by Songs, Albums, Artists, or Playlists**: Switch views with Material 3 filter chips, jump into album tracklists sorted by track number or artist discographies, and play or shuffle any collection in one tap.
-- **Playlists & Liked Music**: Create custom playlists with YouTube-Music-inspired 2×2 cover artwork collages, multi-select and add songs, reorder tracks, and star favorites into the pinned **Liked Music** playlist.
-- **Song management**: Inspect per-song **File Info** (filename, path, size, MIME type, duration, bitrate, sample rate, and modified date), **Hide/Unhide** tracks from the library, or **Delete** audio files from device storage with system confirmation.
+- **Organized local library**: Scans device audio and videos via Android `MediaStore` and observes changes automatically (`ContentObserver`), so newly added tracks appear without manual refreshes.
+- **Play videos as audio**: Listen to local `.mp4`, `.mkv`, and `.webm` videos directly through the audio-only `ExoPlayer` pipeline from the **Videos** tab, playlists, **Liked Music**, search, Mini Player, or lock-screen controls—zero file duplication.
+- **Browse by Songs, Videos, Albums, Artists, or Playlists**: Switch views with Material 3 filter chips, jump into album tracklists sorted by track number or artist discographies, and play or shuffle any collection in one tap.
+- **Playlists & Liked Music**: Create custom playlists with YouTube-Music-inspired 2×2 cover artwork collages (for both songs and videos), multi-select and add tracks with `All` / `Songs` / `Videos` filters, reorder items, and star favorites into the pinned **Liked Music** playlist.
+- **Track management**: Inspect per-item **File Info** (filename, path, video audio-track detection, size, MIME type, duration, bitrate, sample rate, and modified date), **Hide/Unhide** songs or videos from the library, or **Delete** files from device storage with scoped confirmation.
 - **GitHub Releases auto-updater**: Checks `zahidhossin39/musely` GitHub Releases on launch, throttled resume, and manually from the top-right update icon (with an unobtrusive badge when an update is available), then hands the APK URL to your browser via `Intent.ACTION_VIEW`.
-- **Instant multi-word search**: Filter across song titles, artists, and album names simultaneously in real time.
-- **Expressive Now Playing view**: Breathing cover artwork (`0.88x` spring settle when paused), a play/pause button with Material 3 corner-shape morphing, interactive scrubbing, shuffle and repeat (`Off` / `All` / `One`) toggles, and an **Up Next** queue preview.
+- **Instant multi-word search**: Filter across song titles, video titles, artists, and album names simultaneously in real time.
+- **Expressive Now Playing view**: Breathing cover art or video frame artwork (`0.88x` spring settle when paused), a play/pause button with Material 3 corner-shape morphing, interactive scrubbing, shuffle and repeat (`Off` / `All` / `One`) toggles, and an **Up Next** queue preview.
 - **Floating Mini Player**: Persistent bottom card with live progress bar across library and detail screens.
 - **Background & lock-screen playback**: Powered by a `MediaSessionService` with audio-only `ExoPlayer`, audio focus handling, unplug/noisy-output pause, and media notification artwork.
-- **Smart cover art loading**: Resolves `MediaStore` track thumbnails, embedded audio picture frames (`MediaMetadataRetriever`), album art URIs, and fallback album tracks with an in-memory LRU cache.
+- **Smart artwork loading**: Resolves `MediaStore` audio/video thumbnails, embedded pictures, video frames, album art URIs, and fallback album tracks with an in-memory LRU cache.
 - **Material 3 identity**: Light and dark themes built from Musely Violet (`#6755EF`) and Musely Lime (`#F4FF90`), edge-to-edge layout, time-of-day greetings, and Android 13+ monochrome themed launcher icons.
 
 ## Download
@@ -65,8 +66,10 @@ Musely's audio library, playlists, artwork decoding, and playback remain **100% 
 | Permission | Android Version | Purpose |
 | :--- | :--- | :--- |
 | `READ_MEDIA_AUDIO` | Android 13+ (API 33+) | Read local audio files from `MediaStore` |
-| `READ_EXTERNAL_STORAGE` | Android 8.0–12 (API 26–32) | Read local audio files on pre-Android 13 devices |
-| `WRITE_EXTERNAL_STORAGE` | Android 8.0–10 (API 26–29) | User-confirmed audio file deletion on pre-Android 11 devices (`maxSdkVersion="29"`) |
+| `READ_MEDIA_VIDEO` | Android 13+ (API 33+) | Read local video files to play their audio streams directly |
+| `READ_MEDIA_VISUAL_USER_SELECTED` | Android 14+ (API 34+) | Support partial selected-video access and `"Select more"` picker |
+| `READ_EXTERNAL_STORAGE` | Android 8.0–12 (API 26–32) | Read local audio and video files on pre-Android 13 devices |
+| `WRITE_EXTERNAL_STORAGE` | Android 8.0–10 (API 26–29) | User-confirmed media file deletion on pre-Android 11 devices (`maxSdkVersion="29"`) |
 | `INTERNET` | Android 8.0+ (API 26+) | Check `zahidhossin39/musely` GitHub Releases for updates |
 | `FOREGROUND_SERVICE` | Android 9+ (API 28+) | Run a foreground service for continuous background playback |
 | `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | Android 14+ (API 34+) | Declare media-playback foreground service type for system controls |
@@ -102,14 +105,14 @@ Musely's audio library, playlists, artwork decoding, and playback remain **100% 
 │       ├── main/
 │       │   ├── AndroidManifest.xml
 │       │   ├── kotlin/com/musely/app/
-│       │   │   ├── AlbumArt.kt        # Artwork pipeline & LRU cache
+│       │   │   ├── AlbumArt.kt        # Audio/video artwork pipeline & LRU cache
 │       │   │   ├── AppUpdater.kt      # GitHub Releases update checker
-│       │   │   ├── Library.kt         # MediaStore query, grouping & search
+│       │   │   ├── Library.kt         # MediaStore audio/video query, grouping & search
 │       │   │   ├── MainActivity.kt    # Edge-to-edge host activity
 │       │   │   ├── MainViewModel.kt   # Library, playlist & MediaController state
 │       │   │   ├── PlaybackService.kt # Background MediaSessionService & ExoPlayer
 │       │   │   ├── PlaylistStore.kt   # Local JSON store for playlists, stars & hidden tracks
-│       │   │   ├── SongActions.kt     # File info metadata & MediaStore song deletion
+│       │   │   ├── SongActions.kt     # File info metadata & MediaStore media deletion
 │       │   │   └── ui/                # Compose screens, mini player, components & M3 theme
 │       │   └── res/                   # Vector icons, adaptive/monochrome mipmaps, themes
 │       └── test/kotlin/com/musely/app/ # JUnit 4 unit tests
@@ -158,7 +161,7 @@ On Windows, replace `./gradlew` with `gradlew.bat`.
 
 ### Releases
 
-Pushing a version tag matching `v*` (for example `v2.0.0`) runs unit tests and Android Lint, builds the canonical `Musely.apk` alongside `musely-<version>.apk`, generates and verifies `.sha256` checksums, and publishes a GitHub Release automatically via [`.github/workflows/build.yml`](.github/workflows/build.yml).
+Pushing a version tag matching `v*` (for example `v3.0.0`) runs unit tests and Android Lint, builds the canonical `Musely.apk` alongside `musely-<version>.apk`, generates and verifies `.sha256` checksums, and publishes a GitHub Release automatically via [`.github/workflows/build.yml`](.github/workflows/build.yml).
 
 For persistent release signing in CI, configure these repository secrets:
 
