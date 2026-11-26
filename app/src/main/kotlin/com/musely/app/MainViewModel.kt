@@ -19,6 +19,8 @@ import androidx.media3.common.Tracks
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
+import com.musely.app.download.DownloadCenter
+import com.musely.app.download.DownloadEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -98,7 +100,7 @@ internal fun resolveUpdateStatusAfterCheck(
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val store = PlaylistStore(app)
+    private val store = PlaylistStore.shared(app)
     private val _userState = MutableStateFlow(store.loadState())
 
     private val _allSongs = MutableStateFlow<List<Song>>(emptyList())
@@ -257,6 +259,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             MediaStore.Video.Media.EXTERNAL_CONTENT_URI, true, observer,
         )
         checkForUpdatesOnStartup()
+        DownloadCenter.init(app)
+        viewModelScope.launch {
+            // Finished downloads may have been added to playlists by the download queue.
+            DownloadCenter.events.collect { event ->
+                val touchedPlaylists = when (event) {
+                    is DownloadEvent.Completed -> event.item.request.playlistId != null
+                    is DownloadEvent.BatchFinished -> event.playlistId != null
+                }
+                if (touchedPlaylists) refreshUserState()
+            }
+        }
     }
 
     fun loadLibrary(debounceMs: Long = 0) {
@@ -285,7 +298,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
             withContext(Dispatchers.IO) {
                 store.pruneSongs(
-                    existingSongIds = existingIds,
+                    // A download saved during this scan isn't in the snapshot; keep its playlist entries.
+                    existingSongIds = existingIds + DownloadCenter.recentlySavedTrackIds(),
                     pruneAudio = canReadAudio && audioResult.isSuccess,
                     pruneVideos = canPruneVideos && videoResult.isSuccess,
                 )
