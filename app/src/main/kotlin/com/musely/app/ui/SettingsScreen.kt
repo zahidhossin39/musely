@@ -2,6 +2,7 @@ package com.musely.app.ui
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -31,21 +34,28 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.musely.app.MainViewModel
 import com.musely.app.R
+import com.musely.app.download.DownloadFormat
+import com.musely.app.download.DownloadsViewModel
+import com.musely.app.download.VideoQuality
 
 private const val PROJECT_URL = "https://github.com/zahidhossin39/musely"
 private const val ISSUES_URL = "$PROJECT_URL/issues/new/choose"
 private const val LICENSE_URL = "$PROJECT_URL/blob/main/LICENSE"
+private const val NOTICES_URL = "$PROJECT_URL/blob/main/THIRD_PARTY_NOTICES.md"
 
 /** The Settings tab: app updates, library housekeeping and project links. */
 @Composable
 internal fun SettingsScreen(
     vm: MainViewModel,
+    downloads: DownloadsViewModel,
     listState: LazyListState,
     bottomInset: Dp,
     onOpenSystemSettings: () -> Unit,
 ) {
     val updateStatus by vm.updateStatus.collectAsStateWithLifecycle()
     val hiddenSongs by vm.hiddenSongs.collectAsStateWithLifecycle()
+    val defaultFormat by downloads.defaultFormat.collectAsStateWithLifecycle()
+    val videoQuality by downloads.videoQuality.collectAsStateWithLifecycle()
     var showHiddenSheet by remember { mutableStateOf(false) }
     val openUrl: (String) -> Unit = { url -> vm.openUpdateUrl(url) }
 
@@ -67,6 +77,36 @@ internal fun SettingsScreen(
                 onOpenUrl = openUrl,
                 modifier = Modifier.padding(horizontal = ItemInset),
             )
+        }
+
+        item(key = "downloads-title") { SettingsSectionTitle("Downloads") }
+        item(key = "downloads") {
+            SettingsGroup {
+                ChoiceRow(
+                    iconRes = R.drawable.ic_download,
+                    title = "Default format",
+                    options = DownloadFormat.entries,
+                    selected = defaultFormat,
+                    label = { if (it == DownloadFormat.Audio) "Audio (M4A)" else "Video (MP4)" },
+                    onSelect = downloads::setDefaultFormat,
+                )
+                SettingsDivider()
+                ChoiceRow(
+                    iconRes = R.drawable.ic_video,
+                    title = "Video quality",
+                    options = VideoQuality.entries,
+                    selected = videoQuality,
+                    label = { "Up to ${it.label}" },
+                    onSelect = downloads::setVideoQuality,
+                )
+                SettingsDivider()
+                SettingsRow(
+                    iconRes = R.drawable.ic_note,
+                    title = "Saved to",
+                    subtitle = "Music/Musely for songs · Movies/Musely for videos",
+                    onClick = null,
+                )
+            }
         }
 
         item(key = "library-title") { SettingsSectionTitle("Library") }
@@ -113,6 +153,14 @@ internal fun SettingsScreen(
                     title = "License",
                     subtitle = "MIT",
                     onClick = { openUrl(LICENSE_URL) },
+                    trailingIconRes = R.drawable.ic_open_in_new,
+                )
+                SettingsDivider()
+                SettingsRow(
+                    iconRes = R.drawable.ic_info,
+                    title = "Open-source licenses",
+                    subtitle = "Includes NewPipe Extractor (GPL-3.0)",
+                    onClick = { openUrl(NOTICES_URL) },
                     trailingIconRes = R.drawable.ic_open_in_new,
                 )
             }
@@ -208,6 +256,38 @@ internal fun SettingsRow(
                 modifier = Modifier.size(18.dp),
                 tint = colors.onSurfaceVariant,
             )
+        }
+    }
+}
+
+/** A settings line whose value is picked from a short dropdown list. */
+@Composable
+internal fun <T> ChoiceRow(
+    @DrawableRes iconRes: Int,
+    title: String,
+    options: List<T>,
+    selected: T,
+    label: (T) -> String,
+    onSelect: (T) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        SettingsRow(iconRes = iconRes, title = title, subtitle = label(selected), onClick = { expanded = true })
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.padding(horizontal = 4.dp)) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(label(option)) },
+                    onClick = {
+                        expanded = false
+                        onSelect(option)
+                    },
+                    trailingIcon = if (option == selected) {
+                        { Icon(painterResource(R.drawable.ic_check), contentDescription = "Selected", modifier = Modifier.size(18.dp)) }
+                    } else {
+                        null
+                    },
+                )
+            }
         }
     }
 }
