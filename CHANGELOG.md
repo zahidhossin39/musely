@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-11-26
+
+### Added
+- Bottom navigation bar with **Home**, **Playlists**, **Downloads**, and **Settings** tabs (`MuselyBottomBar`, `MainTab`); each tab keeps its own album/artist/playlist drill-in, re-tapping a tab returns to its root, and system back returns to Home before leaving the app
+- **Settings** tab (`SettingsScreen`) with an inline app-update card, hidden songs & videos management, an app-permissions shortcut, and project links (source code, issue reporting, license)
+- Badge on the Settings tab when a newer GitHub release is available
+- `NavigationTest` unit tests for tab order, back navigation, and settings/playlists copy
+- **Downloads** from YouTube, YouTube Music, and Spotify links (`com.musely.app.download`), powered by NewPipe Extractor `v0.27.1`:
+  - Paste a link on the Downloads tab, or **Share** it from the YouTube, YouTube Music, or Spotify app to Musely (`ACTION_SEND` share target, `IncomingShare`)
+  - **Audio first**: best AAC stream saved as `.m4a` (remuxed from fragmented MP4 so it can carry tags); Opus/WebM fallback
+  - **Video**: H.264 video and AAC audio merged on-device into `.mp4` with `MediaMuxer` (`MediaRemuxer`), capped at 360p/480p/720p/1080p, with a pre-muxed fallback
+  - Single tracks plus YouTube playlists and Spotify albums/playlists (up to 300 items), with an option to save them straight into a Musely playlist
+  - Spotify tracks are read from Spotify's public embed data and matched on YouTube Music by title, artist, and duration (`TrackMatcher`); Spotify audio is never downloaded or decrypted
+  - Title, artist, album, and cover art written into M4A/MP4 files (`Mp4Tagger`), so downloads appear correctly in Musely and other players
+  - Files saved through `MediaStore` to `Music/Musely` (audio) and `Movies/Musely` (video) and picked up by the library automatically
+  - Ranged, resumable transfers with automatic stream-link refresh (`ChunkedDownloader`), two downloads at a time, cancel/retry, and persisted download history (`DownloadCenter`)
+  - Foreground `dataSync` service with a progress notification and "Cancel all" action (`DownloadService`)
+- Post-download options: a "Downloaded" snackbar with **Options**, plus a sheet to play, add to a playlist, add to Liked Music, share, view file info, delete, or remove from the list (`DownloadActionsSheet`)
+- **Downloads** settings for default format (Audio/Video) and video quality, and an "Open-source licenses" entry
+- [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) documenting bundled libraries and that release APKs are distributed under GPL-3.0 terms
+- Unit tests for link parsing, Spotify embed parsing, track matching, stream selection, MP4 tagging, download history, and download UI text
+
+### Changed
+- Moved playlists out of the Home section chips into the dedicated **Playlists** tab (`PlaylistsScreen`)
+- Moved the app updater from the Home top bar into Settings; `UpdateSheet`/`UpdateTopBarButton` are replaced by `UpdateCard`
+- Bottom bar steps aside while the keyboard is open so text fields stay visible
+- `INTERNET` is now also used for downloads; added `FOREGROUND_SERVICE_DATA_SYNC` and `POST_NOTIFICATIONS` permissions
+- `PlaylistStore.shared()` provides one process-wide store so background downloads and the UI never overwrite each other's playlist edits; library rescans no longer prune tracks saved moments earlier
+- Enabled core library desugaring (`desugar_jdk_libs_nio`) and added R8 keep rules required by NewPipe Extractor
+- Bumped default `versionCode` to `6` and `versionName` to `3.5.0` in `app/build.gradle.kts`
+
 ## [3.0.0] - 2026-11-13
 
 ### Added
@@ -70,7 +101,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial Android project skeleton (originally named Waveloop, `com.waveloop.player`) with Jetpack Compose UI, MediaStore library loading, in-memory search, and background Media3 `PlaybackService`
 - MIT `LICENSE` and initial GitHub Actions build workflow
 
-[Unreleased]: https://github.com/zahidhossin39/musely/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/zahidhossin39/musely/compare/v3.5.0...HEAD
+[3.5.0]: https://github.com/zahidhossin39/musely/compare/v3.0.0...v3.5.0
 [3.0.0]: https://github.com/zahidhossin39/musely/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/zahidhossin39/musely/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/zahidhossin39/musely/compare/v0.2.0...v1.0.0

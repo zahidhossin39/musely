@@ -33,16 +33,19 @@
 
 ---
 
-Musely turns the audio and video files already stored on your device into a fast, distraction-free listening library—playing video audio streams directly without copying files, with no accounts, no ads, no analytics, and nothing leaving your phone.
+Musely turns the audio and video files already stored on your device into a fast, distraction-free listening library—playing video audio streams directly without copying files—and can download songs and videos from YouTube, YouTube Music, and Spotify links. No accounts, no ads, no analytics.
 
 ## Features
 
 - **Organized local library**: Scans device audio and videos via Android `MediaStore` and observes changes automatically (`ContentObserver`), so newly added tracks appear without manual refreshes.
 - **Play videos as audio**: Listen to local `.mp4`, `.mkv`, and `.webm` videos directly through the audio-only `ExoPlayer` pipeline from the **Videos** tab, playlists, **Liked Music**, search, Mini Player, or lock-screen controls—zero file duplication.
-- **Browse by Songs, Videos, Albums, Artists, or Playlists**: Switch views with Material 3 filter chips, jump into album tracklists sorted by track number or artist discographies, and play or shuffle any collection in one tap.
+- **Bottom navigation**: Move between **Home**, **Playlists**, **Downloads**, and **Settings** tabs. Each tab remembers where you were, re-tapping a tab returns to its top, and back always leads home first.
+- **Browse by Songs, Videos, Albums, or Artists**: Switch Home views with Material 3 filter chips, jump into album tracklists sorted by track number or artist discographies, and play or shuffle any collection in one tap.
 - **Playlists & Liked Music**: Create custom playlists with YouTube-Music-inspired 2×2 cover artwork collages (for both songs and videos), multi-select and add tracks with `All` / `Songs` / `Videos` filters, reorder items, and star favorites into the pinned **Liked Music** playlist.
+- **Downloads from YouTube, YouTube Music & Spotify**: Paste a link on the **Downloads** tab or tap **Share → Musely** in those apps. Audio (the default) is saved as tagged `.m4a` with cover art; video is saved as `.mp4` up to your chosen quality. Single tracks, YouTube playlists, and Spotify albums/playlists are supported, optionally saved straight into a Musely playlist. Spotify audio is DRM-protected, so Musely matches each Spotify track on YouTube Music instead.
+- **Post-download options**: When a download finishes, play it, add it to a playlist or **Liked Music**, share it, view file info, or delete it right away. Downloads land in `Music/Musely` and `Movies/Musely` and appear in your library automatically.
 - **Track management**: Inspect per-item **File Info** (filename, path, video audio-track detection, size, MIME type, duration, bitrate, sample rate, and modified date), **Hide/Unhide** songs or videos from the library, or **Delete** files from device storage with scoped confirmation.
-- **GitHub Releases auto-updater**: Checks `zahidhossin39/musely` GitHub Releases on launch, throttled resume, and manually from the top-right update icon (with an unobtrusive badge when an update is available), then hands the APK URL to your browser via `Intent.ACTION_VIEW`.
+- **Settings & GitHub Releases auto-updater**: The **Settings** tab checks `zahidhossin39/musely` GitHub Releases on launch, throttled resume, and on demand (with a badge on the tab when an update is available), then hands the APK URL to your browser via `Intent.ACTION_VIEW`. It also manages hidden tracks and links to permissions, source code, and issue reporting.
 - **Instant multi-word search**: Filter across song titles, video titles, artists, and album names simultaneously in real time.
 - **Expressive Now Playing view**: Breathing cover art or video frame artwork (`0.88x` spring settle when paused), a play/pause button with Material 3 corner-shape morphing, interactive scrubbing, shuffle and repeat (`Off` / `All` / `One`) toggles, and an **Up Next** queue preview.
 - **Floating Mini Player**: Persistent bottom card with live progress bar across library and detail screens.
@@ -61,7 +64,13 @@ Musely turns the audio and video files already stored on your device into a fast
 
 ## Privacy & Permissions
 
-Musely's audio library, playlists, artwork decoding, and playback remain **100% offline** with zero ads, analytics, telemetry, or accounts. `INTERNET` is declared solely to check `zahidhossin39/musely` GitHub Releases for app updates and open the APK URL in your browser (no `REQUEST_INSTALL_PACKAGES` permission or in-app downloader is used).
+Musely's library, playlists, artwork decoding, and playback remain **offline** with zero ads, analytics, telemetry, or accounts. Musely connects to the internet only to:
+
+- check `zahidhossin39/musely` GitHub Releases for app updates (the APK opens in your browser; no `REQUEST_INSTALL_PACKAGES` permission is used), and
+- look up and download the YouTube, YouTube Music, or Spotify links **you** paste or share. Requests go only to YouTube/Google and Spotify servers, and nothing about your library is sent.
+
+> [!IMPORTANT]
+> Downloading may be restricted by the terms of the services involved and by copyright law where you live. Only download content you have the right to keep.
 
 | Permission | Android Version | Purpose |
 | :--- | :--- | :--- |
@@ -69,11 +78,13 @@ Musely's audio library, playlists, artwork decoding, and playback remain **100% 
 | `READ_MEDIA_VIDEO` | Android 13+ (API 33+) | Read local video files to play their audio streams directly |
 | `READ_MEDIA_VISUAL_USER_SELECTED` | Android 14+ (API 34+) | Support partial selected-video access and `"Select more"` picker |
 | `READ_EXTERNAL_STORAGE` | Android 8.0–12 (API 26–32) | Read local audio and video files on pre-Android 13 devices |
-| `WRITE_EXTERNAL_STORAGE` | Android 8.0–10 (API 26–29) | User-confirmed media file deletion on pre-Android 11 devices (`maxSdkVersion="29"`) |
-| `INTERNET` | Android 8.0+ (API 26+) | Check `zahidhossin39/musely` GitHub Releases for updates |
+| `WRITE_EXTERNAL_STORAGE` | Android 8.0–10 (API 26–29) | User-confirmed media file deletion on pre-Android 11 devices, and saving downloads on Android 8–9 (`maxSdkVersion="29"`) |
+| `INTERNET` | Android 8.0+ (API 26+) | Check `zahidhossin39/musely` GitHub Releases for updates; look up and download links you choose |
 | `FOREGROUND_SERVICE` | Android 9+ (API 28+) | Run a foreground service for continuous background playback |
 | `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | Android 14+ (API 34+) | Declare media-playback foreground service type for system controls |
 | `WAKE_LOCK` | Android 8.0+ (API 26+) | Prevent CPU sleep from interrupting audio playback |
+| `FOREGROUND_SERVICE_DATA_SYNC` | Android 14+ (API 34+) | Keep downloads running in the background with a progress notification |
+| `POST_NOTIFICATIONS` | Android 13+ (API 33+) | Show download progress (optional; asked once when you start a download) |
 
 ## Tech Stack
 
@@ -82,6 +93,7 @@ Musely's audio library, playlists, artwork decoding, and playback remain **100% 
 | **Language** | Kotlin (Compose Compiler `2.4.21`, JVM target 17) |
 | **UI** | Jetpack Compose & Material 3 (`androidx.compose:compose-bom:2026.09.00`) |
 | **Playback** | AndroidX Media3 ExoPlayer & MediaSession (`1.11.1`) |
+| **Downloads** | [NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor) (`v0.27.1`), `MediaMuxer` remuxing, `MediaStore` publishing |
 | **State & Lifecycle** | `AndroidViewModel`, Kotlin `StateFlow`, Lifecycle Runtime Compose (`2.11.0`) |
 | **Build System** | Gradle `9.9.1` (Kotlin DSL), Android Gradle Plugin `9.5.1` |
 | **SDK Targets** | `minSdk 26` • `targetSdk 36` • `compileSdk 37` |
@@ -113,7 +125,8 @@ Musely's audio library, playlists, artwork decoding, and playback remain **100% 
 │       │   │   ├── PlaybackService.kt # Background MediaSessionService & ExoPlayer
 │       │   │   ├── PlaylistStore.kt   # Local JSON store for playlists, stars & hidden tracks
 │       │   │   ├── SongActions.kt     # File info metadata & MediaStore media deletion
-│       │   │   └── ui/                # Compose screens, mini player, components & M3 theme
+│       │   │   ├── download/          # Link parsing, extraction, download queue, tagging & saving
+│       │   │   └── ui/                # Compose screens, tabs, mini player, components & M3 theme
 │       │   └── res/                   # Vector icons, adaptive/monochrome mipmaps, themes
 │       └── test/kotlin/com/musely/app/ # JUnit 4 unit tests
 ├── .editorconfig
@@ -124,6 +137,7 @@ Musely's audio library, playlists, artwork decoding, and playback remain **100% 
 ├── CONTRIBUTING.md
 ├── LICENSE
 ├── SECURITY.md
+├── THIRD_PARTY_NOTICES.md     # Bundled libraries and their licenses
 ├── build.gradle.kts           # Root Gradle plugin versions
 ├── gradle.properties          # JVM & AndroidX Gradle properties
 ├── gradlew / gradlew.bat      # Gradle wrapper scripts
@@ -179,4 +193,4 @@ For persistent release signing in CI, configure these repository secrets:
 
 ## License
 
-Licensed under the [MIT License](LICENSE). Copyright © 2026 [zahidhossin39](https://github.com/zahidhossin39) & [Masum Khan](https://github.com/8Masum).
+Musely's source code is licensed under the [MIT License](LICENSE). Since v3.5.0 the release APK bundles [NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor) (GPL-3.0-or-later), so the APK as a whole is distributed under GPL-3.0 terms; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Copyright © 2026 [zahidhossin39](https://github.com/zahidhossin39) & [Masum Khan](https://github.com/8Masum).

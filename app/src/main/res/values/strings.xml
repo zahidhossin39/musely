@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Musely</string>
+    <string name="share_to_download">Download with Musely</string>
 </resources>

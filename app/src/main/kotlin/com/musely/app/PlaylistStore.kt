@@ -498,5 +498,16 @@ class PlaylistStore private constructor(
         const val STARRED_PLAYLIST_ID = "__starred__"
         const val STARRED_PLAYLIST_NAME = "Liked Music"
         const val DEFAULT_FILE_NAME = "musely_library_state.json"
+
+        @Volatile private var sharedInstance: PlaylistStore? = null
+
+        /**
+         * The one store the app uses. Each instance caches state, so the UI and background
+         * downloads must share a single instance or they would overwrite each other's edits.
+         */
+        fun shared(context: Context): PlaylistStore =
+            sharedInstance ?: synchronized(this) {
+                sharedInstance ?: PlaylistStore(context.applicationContext).also { sharedInstance = it }
+            }
     }
 }

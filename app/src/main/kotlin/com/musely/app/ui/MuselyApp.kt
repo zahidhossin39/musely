@@ -16,10 +16,21 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -36,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -44,7 +56,14 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.musely.app.MainViewModel
+import com.musely.app.Playlist
+import com.musely.app.Song
+import com.musely.app.UpdateStatus
 import com.musely.app.audioPermission
+import com.musely.app.download.DownloadEvent
+import com.musely.app.download.DownloadsViewModel
+import com.musely.app.download.IncomingRequest
+import com.musely.app.download.IncomingShare
 import com.musely.app.hasAudioAccess
 import com.musely.app.hasPartialVideoAccess
 import com.musely.app.hasVideoAccess
@@ -142,7 +161,11 @@ fun MuselyApp(vm: MainViewModel = viewModel()) {
     }
 }
 
-/** Library, album/artist/playlist detail, the floating mini player and the full-screen player. */
+/**
+ * The main shell: bottom navigation between Home, Playlists, Downloads and Settings, each tab's
+ * album/artist/playlist detail, the floating mini player and the full-screen player.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Player(
     vm: MainViewModel,
@@ -155,15 +178,28 @@ private fun Player(
     val playback by vm.playback.collectAsStateWithLifecycle()
     val playlists by vm.playlists.collectAsStateWithLifecycle()
     val allVisibleTracks by vm.allVisibleTracks.collectAsStateWithLifecycle()
+    val updateStatus by vm.updateStatus.collectAsStateWithLifecycle()
+    val downloads: DownloadsViewModel = viewModel()
+    val hasActiveDownloads by downloads.hasActiveDownloads.collectAsStateWithLifecycle()
+    val pendingIncoming by IncomingShare.pending.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var actionsDownloadId by remember { mutableStateOf<String?>(null) }
     val visibleSongsById = remember(allVisibleTracks) { allVisibleTracks.associateBy { it.id } }
 
     var showPlayer by rememberSaveable { mutableStateOf(false) }
-    var detail by remember { mutableStateOf<LibraryDetail?>(null) }
-    val gridState = rememberLazyGridState()
-    // Lives here, not in LibraryScreen, so the tab survives a trip into an album, artist, or playlist.
+    var tab by rememberSaveable { mutableStateOf(MainTab.Home) }
+    // Each tab keeps its own drill-in so switching tabs and coming back lands where you left off.
+    var homeDetail by remember { mutableStateOf<LibraryDetail?>(null) }
+    var playlistsDetail by remember { mutableStateOf<LibraryDetail?>(null) }
+    val homeGridState = rememberLazyGridState()
+    val playlistsGridState = rememberLazyGridState()
+    val downloadsListState = rememberLazyListState()
+    val settingsListState = rememberLazyListState()
+    // Lives here, not in LibraryScreen, so the section survives a trip into an album or artist.
     var section by rememberSaveable { mutableStateOf(Section.Songs) }
     val hasSong = playback.song != null
     val bottomInset = if (hasSong) MiniPlayerReserve else 0.dp
+    val imeVisible = WindowInsets.isImeVisible
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -191,20 +227,49 @@ private fun Player(
         }
     }
 
-    val currentDetail = detail
-    val resolvedDetail = remember(currentDetail, playlists, visibleSongsById) {
-        if (currentDetail != null && currentDetail.kind == DetailKind.Playlist && currentDetail.playlistId != null) {
-            val livePlaylist = playlists.find { it.id == currentDetail.playlistId }
-            livePlaylist?.let { playlistDetail(it, visibleSongsById) }
-        } else {
-            currentDetail
+    // Post-download follow-up: offer the actions sheet for single downloads, a summary for batches.
+    LaunchedEffect(downloads, showMessage) {
+        downloads.events.collect { event ->
+            when (event) {
+                is DownloadEvent.Completed -> if (event.item.request.batchId == null) {
+                    showMessage("Downloaded \"${event.item.request.title}\"", "Options") {
+                        actionsDownloadId = event.item.request.id
+                    }
+                }
+                is DownloadEvent.BatchFinished -> {
+                    val total = event.completed + event.failed
+                    val savedTo = if (event.playlistId != null && event.completed > 0) " to your playlist" else ""
+                    showMessage("Downloaded ${event.completed} of $total tracks$savedTo", "View") {
+                        tab = if (event.playlistId != null) MainTab.Playlists else MainTab.Downloads
+                    }
+                }
+            }
         }
     }
 
-    LaunchedEffect(currentDetail, resolvedDetail) {
-        if (currentDetail != null && resolvedDetail == null) {
-            detail = null
+    // Links shared from other apps (or a tap on the download notification) land on the Downloads tab.
+    LaunchedEffect(pendingIncoming) {
+        when (val request = pendingIncoming) {
+            null -> Unit
+            is IncomingRequest.SharedText -> {
+                tab = MainTab.Downloads
+                downloads.lookUp(request.text)
+                IncomingShare.consume(request)
+            }
+            IncomingRequest.OpenDownloads -> {
+                tab = MainTab.Downloads
+                IncomingShare.consume(request)
+            }
         }
+    }
+
+    val resolvedHomeDetail = rememberLiveDetail(homeDetail, playlists, visibleSongsById)
+    val resolvedPlaylistsDetail = rememberLiveDetail(playlistsDetail, playlists, visibleSongsById)
+    LaunchedEffect(homeDetail, resolvedHomeDetail) {
+        if (homeDetail != null && resolvedHomeDetail == null) homeDetail = null
+    }
+    LaunchedEffect(playlistsDetail, resolvedPlaylistsDetail) {
+        if (playlistsDetail != null && resolvedPlaylistsDetail == null) playlistsDetail = null
     }
 
     LaunchedEffect(hasSong) {
@@ -213,52 +278,127 @@ private fun Player(
         }
     }
 
-    BackHandler(enabled = !showPlayer && resolvedDetail != null) { detail = null }
+    val currentTabDetail = when (tab) {
+        MainTab.Home -> resolvedHomeDetail
+        MainTab.Playlists -> resolvedPlaylistsDetail
+        MainTab.Downloads, MainTab.Settings -> null
+    }
+    val closeCurrentDetail: () -> Unit = {
+        when (tab) {
+            MainTab.Home -> homeDetail = null
+            MainTab.Playlists -> playlistsDetail = null
+            MainTab.Downloads, MainTab.Settings -> Unit
+        }
+    }
+    val selectTab: (MainTab) -> Unit = { target ->
+        if (target == tab) {
+            // Re-selecting the current tab pops its drill-in, like most music apps.
+            closeCurrentDetail()
+        } else {
+            tab = target
+        }
+    }
+
+    // Composed later = higher priority: player first, then detail, then tab root back to Home.
+    val tabBack = backDestination(tab)
+    BackHandler(enabled = !showPlayer && currentTabDetail == null && tabBack != null) {
+        tabBack?.let { tab = it }
+    }
+    BackHandler(enabled = !showPlayer && currentTabDetail != null) { closeCurrentDetail() }
     BackHandler(enabled = showPlayer) { showPlayer = false }
 
+    val badgedTabs = remember(updateStatus, hasActiveDownloads) {
+        buildSet {
+            if (updateStatus is UpdateStatus.Available) add(MainTab.Settings)
+            if (hasActiveDownloads) add(MainTab.Downloads)
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().safeDrawingPadding()) {
-            AnimatedContent(
-                targetState = resolvedDetail,
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
-                label = "libraryContent",
-            ) { open ->
-                if (open == null) {
-                    LibraryScreen(
-                        vm = vm,
-                        playback = playback,
-                        gridState = gridState,
-                        section = section,
-                        onSectionChange = { section = it },
-                        hasVideoAccess = hasVideoAccess,
-                        hasPartialVideoAccess = hasPartialVideoAccess,
-                        videoDeclined = videoDeclined,
-                        onRequestVideoAccess = onRequestVideoAccess,
-                        onOpenSettings = onOpenSettings,
-                        bottomInset = bottomInset,
-                        songActions = songActions,
-                        onOpenDetail = { detail = it },
-                        onMessage = showMessage,
+        Column(Modifier.fillMaxSize()) {
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
                     )
-                } else {
-                    DetailScreen(
-                        detail = open,
-                        vm = vm,
-                        bottomInset = bottomInset,
-                        songActions = songActions,
-                        onBack = { detail = null },
-                        onOpenNowPlaying = { showPlayer = true },
-                        onMessage = showMessage,
-                    )
+                    .then(if (imeVisible) Modifier.imePadding() else Modifier),
+            ) {
+                AnimatedContent(
+                    targetState = TabScreen(tab, currentTabDetail),
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    contentKey = { it.key },
+                    label = "tabContent",
+                ) { screen ->
+                    val open = screen.detail
+                    when {
+                        open != null -> DetailScreen(
+                            detail = open,
+                            vm = vm,
+                            bottomInset = bottomInset,
+                            songActions = songActions,
+                            onBack = closeCurrentDetail,
+                            onOpenNowPlaying = { showPlayer = true },
+                            onMessage = showMessage,
+                        )
+                        screen.tab == MainTab.Home -> LibraryScreen(
+                            vm = vm,
+                            playback = playback,
+                            gridState = homeGridState,
+                            section = section,
+                            onSectionChange = { section = it },
+                            hasVideoAccess = hasVideoAccess,
+                            hasPartialVideoAccess = hasPartialVideoAccess,
+                            videoDeclined = videoDeclined,
+                            onRequestVideoAccess = onRequestVideoAccess,
+                            onOpenSettings = onOpenSettings,
+                            bottomInset = bottomInset,
+                            songActions = songActions,
+                            onOpenDetail = { homeDetail = it },
+                        )
+                        screen.tab == MainTab.Playlists -> PlaylistsScreen(
+                            vm = vm,
+                            gridState = playlistsGridState,
+                            bottomInset = bottomInset,
+                            onOpenDetail = { playlistsDetail = it },
+                            onMessage = showMessage,
+                        )
+                        screen.tab == MainTab.Downloads -> DownloadsScreen(
+                            downloads = downloads,
+                            vm = vm,
+                            listState = downloadsListState,
+                            bottomInset = bottomInset,
+                            onOpenActions = { actionsDownloadId = it },
+                            onPlay = { song -> vm.play(listOf(song), 0) },
+                            onMessage = showMessage,
+                        )
+                        else -> SettingsScreen(
+                            vm = vm,
+                            downloads = downloads,
+                            listState = settingsListState,
+                            bottomInset = bottomInset,
+                            onOpenSystemSettings = onOpenSettings,
+                        )
+                    }
+                }
+                // Fully qualified: inside the Column, the ColumnScope overload would otherwise win.
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = hasSong && !showPlayer,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    enter = slideInVertically { it } + fadeIn(),
+                    exit = slideOutVertically { it } + fadeOut(),
+                ) {
+                    MiniPlayer(vm, playback, onOpen = { showPlayer = true })
                 }
             }
-            AnimatedVisibility(
-                visible = hasSong && !showPlayer,
-                modifier = Modifier.align(Alignment.BottomCenter),
-                enter = slideInVertically { it } + fadeIn(),
-                exit = slideOutVertically { it } + fadeOut(),
-            ) {
-                MiniPlayer(vm, playback, onOpen = { showPlayer = true })
+            // The keyboard covers the bar anyway; dropping it keeps text fields above the keyboard.
+            if (!imeVisible) {
+                MuselyBottomBar(
+                    current = tab,
+                    onSelect = selectTab,
+                    badgedTabs = badgedTabs,
+                )
             }
         }
         AnimatedVisibility(
@@ -272,12 +412,63 @@ private fun Player(
                 onClose = { showPlayer = false },
             )
         }
+        actionsDownloadId?.let { id ->
+            DownloadActionsHost(
+                downloadId = id,
+                downloads = downloads,
+                vm = vm,
+                songActions = songActions,
+                onClose = { actionsDownloadId = null },
+                onShare = { shareTrack(context, it) },
+            )
+        }
+        // Last child so messages also show above the full-screen player.
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .safeDrawingPadding()
-                .padding(bottom = if (hasSong && !showPlayer) MiniPlayerReserve else 12.dp),
+                .padding(
+                    bottom = snackbarBottomPadding(
+                        playerOpen = showPlayer,
+                        barVisible = !imeVisible,
+                        miniPlayerVisible = hasSong,
+                    ),
+                ),
         )
+    }
+}
+
+/** Height of the Material 3 navigation bar above the system navigation inset. */
+private val BottomBarHeight = 80.dp
+
+/** Keeps snackbars clear of the bottom bar and mini player, or just off the edge over the player. */
+internal fun snackbarBottomPadding(playerOpen: Boolean, barVisible: Boolean, miniPlayerVisible: Boolean): Dp {
+    if (playerOpen) return 12.dp
+    val bar = if (barVisible) BottomBarHeight else 0.dp
+    val mini = if (miniPlayerVisible) MiniPlayerReserve else 12.dp
+    return bar + mini
+}
+
+/** What the content area shows: a tab's root, or a detail drilled into from that tab. */
+private data class TabScreen(val tab: MainTab, val detail: LibraryDetail?) {
+    /** Stable identity so live playlist edits update in place instead of cross-fading. */
+    val key: Any get() = Triple(tab, detail?.kind, detail?.playlistId ?: detail?.title)
+}
+
+/**
+ * Keeps an open playlist detail in sync with live edits (renames, added or removed tracks) and
+ * returns null once the playlist it shows has been deleted.
+ */
+@Composable
+private fun rememberLiveDetail(
+    detail: LibraryDetail?,
+    playlists: List<Playlist>,
+    songsById: Map<Long, Song>,
+): LibraryDetail? = remember(detail, playlists, songsById) {
+    if (detail != null && detail.kind == DetailKind.Playlist && detail.playlistId != null) {
+        playlists.find { it.id == detail.playlistId }?.let { playlistDetail(it, songsById) }
+    } else {
+        detail
     }
 }
