@@ -60,6 +60,10 @@ import com.musely.app.Playlist
 import com.musely.app.Song
 import com.musely.app.UpdateStatus
 import com.musely.app.audioPermission
+import com.musely.app.download.DownloadEvent
+import com.musely.app.download.DownloadsViewModel
+import com.musely.app.download.IncomingRequest
+import com.musely.app.download.IncomingShare
 import com.musely.app.hasAudioAccess
 import com.musely.app.hasPartialVideoAccess
 import com.musely.app.hasVideoAccess
@@ -175,6 +179,11 @@ private fun Player(
     val playlists by vm.playlists.collectAsStateWithLifecycle()
     val allVisibleTracks by vm.allVisibleTracks.collectAsStateWithLifecycle()
     val updateStatus by vm.updateStatus.collectAsStateWithLifecycle()
+    val downloads: DownloadsViewModel = viewModel()
+    val hasActiveDownloads by downloads.hasActiveDownloads.collectAsStateWithLifecycle()
+    val pendingIncoming by IncomingShare.pending.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var actionsDownloadId by remember { mutableStateOf<String?>(null) }
     val visibleSongsById = remember(allVisibleTracks) { allVisibleTracks.associateBy { it.id } }
 
     var showPlayer by rememberSaveable { mutableStateOf(false) }
@@ -215,6 +224,42 @@ private fun Player(
     LaunchedEffect(vm, showMessage) {
         vm.playbackMessages.collect { message ->
             showMessage(message, null, null)
+        }
+    }
+
+    // Post-download follow-up: offer the actions sheet for single downloads, a summary for batches.
+    LaunchedEffect(downloads, showMessage) {
+        downloads.events.collect { event ->
+            when (event) {
+                is DownloadEvent.Completed -> if (event.item.request.batchId == null) {
+                    showMessage("Downloaded \"${event.item.request.title}\"", "Options") {
+                        actionsDownloadId = event.item.request.id
+                    }
+                }
+                is DownloadEvent.BatchFinished -> {
+                    val total = event.completed + event.failed
+                    val savedTo = if (event.playlistId != null && event.completed > 0) " to your playlist" else ""
+                    showMessage("Downloaded ${event.completed} of $total tracks$savedTo", "View") {
+                        tab = if (event.playlistId != null) MainTab.Playlists else MainTab.Downloads
+                    }
+                }
+            }
+        }
+    }
+
+    // Links shared from other apps (or a tap on the download notification) land on the Downloads tab.
+    LaunchedEffect(pendingIncoming) {
+        when (val request = pendingIncoming) {
+            null -> Unit
+            is IncomingRequest.SharedText -> {
+                tab = MainTab.Downloads
+                downloads.lookUp(request.text)
+                IncomingShare.consume(request)
+            }
+            IncomingRequest.OpenDownloads -> {
+                tab = MainTab.Downloads
+                IncomingShare.consume(request)
+            }
         }
     }
 
@@ -262,8 +307,11 @@ private fun Player(
     BackHandler(enabled = !showPlayer && currentTabDetail != null) { closeCurrentDetail() }
     BackHandler(enabled = showPlayer) { showPlayer = false }
 
-    val badgedTabs = remember(updateStatus) {
-        if (updateStatus is UpdateStatus.Available) setOf(MainTab.Settings) else emptySet()
+    val badgedTabs = remember(updateStatus, hasActiveDownloads) {
+        buildSet {
+            if (updateStatus is UpdateStatus.Available) add(MainTab.Settings)
+            if (hasActiveDownloads) add(MainTab.Downloads)
+        }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -316,9 +364,18 @@ private fun Player(
                             onOpenDetail = { playlistsDetail = it },
                             onMessage = showMessage,
                         )
-                        screen.tab == MainTab.Downloads -> DownloadsScreen(listState = downloadsListState, bottomInset = bottomInset)
+                        screen.tab == MainTab.Downloads -> DownloadsScreen(
+                            downloads = downloads,
+                            vm = vm,
+                            listState = downloadsListState,
+                            bottomInset = bottomInset,
+                            onOpenActions = { actionsDownloadId = it },
+                            onPlay = { song -> vm.play(listOf(song), 0) },
+                            onMessage = showMessage,
+                        )
                         else -> SettingsScreen(
                             vm = vm,
+                            downloads = downloads,
                             listState = settingsListState,
                             bottomInset = bottomInset,
                             onOpenSystemSettings = onOpenSettings,
@@ -353,6 +410,16 @@ private fun Player(
                 vm = vm,
                 songActions = songActions,
                 onClose = { showPlayer = false },
+            )
+        }
+        actionsDownloadId?.let { id ->
+            DownloadActionsHost(
+                downloadId = id,
+                downloads = downloads,
+                vm = vm,
+                songActions = songActions,
+                onClose = { actionsDownloadId = null },
+                onShare = { shareTrack(context, it) },
             )
         }
         // Last child so messages also show above the full-screen player.

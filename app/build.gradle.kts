@@ -15,8 +15,8 @@ android {
         applicationId = "com.musely.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 5
-        versionName = (project.findProperty("versionName") as String?) ?: "3.0.0"
+        versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 6
+        versionName = (project.findProperty("versionName") as String?) ?: "3.5.0"
     }
 
     androidResources {
@@ -62,6 +62,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // NewPipeExtractor needs java.nio APIs that only exist natively from API 33.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     buildFeatures {
@@ -91,6 +93,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.media3:media3-exoplayer:1.11.1")
     implementation("androidx.media3:media3-session:1.11.1")
+    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.27.1")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
 }
