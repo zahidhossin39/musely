@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Bottom navigation bar with **Home**, **Playlists**, **Downloads**, and **Settings** tabs (`MuselyBottomBar`, `MainTab`); each tab keeps its own album/artist/playlist drill-in, re-tapping a tab returns to its root, and system back returns to Home before leaving the app
+- **Settings** tab (`SettingsScreen`) with an inline app-update card, hidden songs & videos management, an app-permissions shortcut, and project links (source code, issue reporting, license)
+- Badge on the Settings tab when a newer GitHub release is available
+- `NavigationTest` unit tests for tab order, back navigation, and settings/playlists copy
+
+### Changed
+- Moved playlists out of the Home section chips into the dedicated **Playlists** tab (`PlaylistsScreen`)
+- Moved the app updater from the Home top bar into Settings; `UpdateSheet`/`UpdateTopBarButton` are replaced by `UpdateCard`
+- Bottom bar steps aside while the keyboard is open so text fields stay visible
+
 ## [3.0.0] - 2026-11-13
 
 ### Added
